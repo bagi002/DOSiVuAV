@@ -1,0 +1,14 @@
+# Ulazni podaci i materijali kursa (lokalno)
+sources/
+
+# Rezultati obrade
+output_images/*
+output_videos/*
+!output_images/.gitkeep
+!output_videos/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
