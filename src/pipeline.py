@@ -27,7 +27,11 @@ CAMERAS = {
 DST = np.float32([(320, 0), (960, 0), (960, 720), (320, 720)])
 XM_PER_PX = 3.7 / 640  # lane width (3.7 m) is 640 px on the canvas
 Z_BOTTOM_M = 4.75      # distance from the camera to the road in the bottom row of the frame
-LOOK_AHEAD = 0.135     # top edge of the trapezoid, as a fraction of the way from the vanishing point down
+# Top edge of the trapezoid, as a fraction of the way from the vanishing point down: 30 m of road on a
+# straight road, shorter in sharp curves, where the lines would leave the canvas through its sides
+LOOK_AHEAD = (0.135, 0.3)
+LOOK_AHEAD_RADII_M = (300, 30)  # the look-ahead changes between these radii of curvature
+LOOK_AHEAD_STEP = 0.005         # largest change of the look-ahead per frame
 
 # Binary image: lane paint is a bright (L) or yellow (b) stripe narrower than the top-hat kernel
 TOPHAT_WIDTH = 61      # px = 35 cm, a lane line is 10-15 cm wide
@@ -35,14 +39,26 @@ WHITE_MIN = 30         # L - opening(L)
 YELLOW_MIN = 8         # b - opening(b)
 
 # Lane pixel search
-LANE_WIDTH_M = (2.5, 4.3)  # possible lane widths at the car
 N_WINDOWS = 9
 WINDOW_MARGIN = 100      # half-width of a sliding window
 MIN_PIX = 50             # pixels needed to re-center a window
+SEARCH_MARGIN = 60       # half-width of the band around the previous fit
 MIN_LINE_PIX = 300       # pixels needed to fit a line
 RANSAC_ITERATIONS = 250  # as in lecture 04
 RANSAC_TOLERANCE = 30    # px, a pixel this close to the curve is an inlier
 MIN_INLIER_SHARE = 0.6   # a line is thin, so most pixels around it lie on it (noise fills the whole window)
+
+# Video: a new pair of lines is accepted only if it looks like a lane
+LANE_WIDTH_M = (2.5, 4.3)  # at the car
+MAX_WIDTH_CHANGE_M = 2.5   # between the car and any point ahead
+MAX_WIDTH_JUMP_M = 0.5     # between two frames
+MAX_OFFSET_M = 1.2         # the car is inside its lane
+MAX_CURVATURE_DIFF = 0.01  # 1/m, the two lines bend alike
+SMOOTHING = 0.25           # weight of the new fit in the moving average
+MAX_MISSES = 10            # frames without a valid fit before the lane is dropped
+PITCH_GAIN = 0.5           # px the vanishing point moves per meter of lane width difference (top vs bottom)
+MAX_PITCH_PX = 30          # the vanishing point stays this close to the measured one
+PITCH_MIN_RADIUS_M = 500   # the pitch is estimated only on gentle curves, where the lines are modelled well
 
 
 def calibrate():
@@ -70,17 +86,22 @@ def calibrate():
     return mtx, dist, size
 
 
+def look_ahead(radius):
+    """Top edge of the trapezoid for a lane with this radius of curvature (m)."""
+    return np.interp(radius, LOOK_AHEAD_RADII_M[::-1], LOOK_AHEAD[::-1])
+
+
 def ym_per_px(look_ahead):
     """Meters per canvas row: the canvas shows the road from Z_BOTTOM_M to Z_BOTTOM_M / look_ahead."""
     return Z_BOTTOM_M * (1 / look_ahead - 1) / WARP_SIZE[1]
 
 
-def perspective(frame_size):
-    """Matrices frame -> canvas and canvas -> frame for a frame of the given (width, height)."""
-    (vx, vy), (left, right) = CAMERAS[frame_size]
+def perspective(frame_size, vp_y, look_ahead=LOOK_AHEAD[0]):
+    """Matrices frame -> canvas and canvas -> frame, for the camera's vanishing point at row vp_y."""
+    (vx, _), (left, right) = CAMERAS[frame_size]
     h = frame_size[1]
-    top = vy + LOOK_AHEAD * (h - vy)
-    src = np.float32([(vx + LOOK_AHEAD * (left - vx), top), (vx + LOOK_AHEAD * (right - vx), top),
+    top = vp_y + look_ahead * (h - vp_y)
+    src = np.float32([(vx + look_ahead * (left - vx), top), (vx + look_ahead * (right - vx), top),
                       (right, h), (left, h)])
     return cv2.getPerspectiveTransform(src, DST), cv2.getPerspectiveTransform(DST, src)
 
@@ -141,6 +162,25 @@ def sliding_windows(binary, car_x):
     return masks, windows
 
 
+def around_fit(ys, xs, fit):
+    """Masks of the pixels near the previous left / right polynomials.
+
+    Windows go from the bottom up along each polynomial, shifted sideways by as much as the line pixels
+    in the window below have moved away from it, so a line that starts to bend more is not lost.
+    """
+    win_h = WARP_SIZE[1] // N_WINDOWS
+    masks = []
+    for line in fit:
+        mask, shift, expected = np.zeros(len(xs), bool), 0, np.polyval(line, ys)
+        for y in range(WARP_SIZE[1], 0, -win_h):
+            inside = (ys >= y - win_h) & (ys < y) & (np.abs(xs - expected - shift) < SEARCH_MARGIN)
+            mask |= inside
+            if inside.sum() > MIN_PIX:
+                shift = np.mean(xs[inside] - expected[inside])
+        masks.append(mask)
+    return masks
+
+
 def fit_line(ys, xs, rng):
     """Second order polynomial x = Ay^2 + By + C through the pixels, robust to outliers (RANSAC, lecture 04).
 
@@ -164,6 +204,34 @@ def fit_line(ys, xs, rng):
     if inliers.sum() <= MIN_LINE_PIX or inliers.mean() < MIN_INLIER_SHARE:
         return None
     return np.polyfit(ys[inliers], xs[inliers], 2)
+
+
+def remap(fit, homography):
+    """The polynomials moved to another canvas (the perspective changes between frames)."""
+    y = np.linspace(0, WARP_SIZE[1], 20)
+    lines = [np.float32([np.column_stack([np.polyval(line, y), y])]) for line in fit]
+    return np.array([np.polyfit(p[:, 1], p[:, 0], 2)
+                     for p in (cv2.perspectiveTransform(line, homography)[0] for line in lines)])
+
+
+def parallel(line, offset_m, ym):
+    """The curve at a fixed distance (m, + = right) from the line, measured along its normal."""
+    y = np.linspace(0, WARP_SIZE[1], 20)
+    slope = np.polyval(np.polyder(line), y) * XM_PER_PX / ym  # dx/dy in meters
+    norm = np.sqrt(1 + slope ** 2)
+    return np.polyfit(y - offset_m * slope / norm / ym, np.polyval(line, y) + offset_m / norm / XM_PER_PX, 2)
+
+
+def lane_widths_m(fit, ym):
+    """Width of the lane in meters, measured across the lane, from the top of the canvas down to the car.
+
+    Only rows where both lines are on the canvas count (in a sharp curve the lines leave it sideways).
+    """
+    y = np.linspace(0, WARP_SIZE[1], 10)
+    left, right = np.polyval(fit[0], y), np.polyval(fit[1], y)
+    slope = np.polyval(np.polyder(fit.mean(axis=0)), y) * XM_PER_PX / ym  # dx/dy of the center in meters
+    widths = (right - left) * XM_PER_PX / np.sqrt(1 + slope ** 2)
+    return widths[(left > 0) & (right < WARP_SIZE[0])]
 
 
 def curvature(line, ym):
@@ -206,32 +274,87 @@ def draw_lane(undist, fit, Minv, radius, offset):
 
 
 class LaneDetector:
-    """The whole pipeline: detector(frame) returns the processed frame."""
+    """The whole pipeline: detector(frame) returns the frame with the lane drawn on it."""
 
     def __init__(self):
         self.mtx, self.dist, self.calib_size = calibrate()
         self.rng = np.random.default_rng(0)  # RANSAC samples: the same input always gives the same result
-        self.ym = ym_per_px(LOOK_AHEAD)      # meters per canvas row
-        self.fit = None    # (left, right) polynomials on the canvas
+        self.fit = None    # smoothed (left, right) polynomials on the canvas
+        self.misses = 0    # consecutive frames without a valid fit
+        self.tracking = False  # both lines were found in the last frame: search around them
+        self.vp_y = None   # row of the vanishing point, adjusted while tracking (camera pitch)
         self.radius = self.offset = None  # last measurement, in meters
+        self.reach = LOOK_AHEAD[0]  # look-ahead of the canvas, shorter in sharp curves
+        self.Minv = None   # canvas -> frame of the previous frame
 
     def __call__(self, frame):
         h, w = frame.shape[:2]
         undist = frame
         if (w, h) == self.calib_size:  # the calibration only holds for the camera it was computed for
             undist = cv2.undistort(frame, self.mtx, self.dist, None, self.mtx)
-        M, Minv = perspective((w, h))
+        if self.vp_y is None:
+            vp_y = CAMERAS[w, h][0][1]
+            self.vp_y, self.vp_limits = vp_y, (vp_y - MAX_PITCH_PX, vp_y + MAX_PITCH_PX)
+        if self.fit is not None:
+            self.reach += np.clip(look_ahead(self.radius) - self.reach, -LOOK_AHEAD_STEP, LOOK_AHEAD_STEP)
+        M, Minv = perspective((w, h), self.vp_y, self.reach)
+        self.ym = ym_per_px(self.reach)
+        if self.fit is not None:  # the canvas moved with the look-ahead and the pitch, so move the lane too
+            self.fit = remap(self.fit, M @ self.Minv)
+        self.Minv = Minv
         binary = binarize(cv2.warpPerspective(undist, M, WARP_SIZE))
 
         car_x = cv2.perspectiveTransform(np.float32([[[w / 2, h]]]), M)[0, 0, 0]  # the car on the canvas
         ys, xs = binary.nonzero()
-        masks, _ = sliding_windows(binary, car_x)
+        masks = around_fit(ys, xs, self.fit) if self.tracking else sliding_windows(binary, car_x)[0]
         lines = [fit_line(ys[mask], xs[mask], self.rng) for mask in masks]
-
-        if lines[0] is None or lines[1] is None:
-            self.fit = None
+        self.update(lines, [mask.sum() for mask in masks], car_x)
+        if self.fit is None:
             return undist
 
-        self.fit = np.array(lines)
         self.radius, self.offset = curvature_and_offset(self.fit, car_x, self.ym)
         return draw_lane(undist, self.fit, Minv, self.radius, self.offset)
+
+    def update(self, new, pixels, car_x):
+        """Accept the new pair of lines if it looks like a lane, and average it with the previous ones.
+
+        If the pair does not look like a lane (or a line is missing), the line with more pixels is trusted
+        and the other one is assumed parallel to it, at the last known lane width.
+        """
+        candidates = [new]
+        strong = int(np.argmax(pixels))
+        widths = lane_widths_m(self.fit, self.ym) if self.fit is not None else []
+        if len(widths) and new[strong] is not None:
+            other = parallel(new[strong], widths[-1] if strong == 0 else -widths[-1], self.ym)
+            candidates.append([new[0], other] if strong == 0 else [other, new[1]])
+
+        for i, lines in enumerate(candidates):
+            if lines[0] is None or lines[1] is None:
+                continue
+            lines = np.array(lines)
+            widths = lane_widths_m(lines, self.ym)
+            if self.plausible(lines, widths, car_x):
+                self.fit = lines if self.fit is None else SMOOTHING * lines + (1 - SMOOTHING) * self.fit
+                self.misses = 0
+                self.tracking = True
+                if i == 0 and curvature_and_offset(lines, car_x, self.ym)[0] > PITCH_MIN_RADIUS_M:
+                    # On a correct bird's-eye view the lines are parallel. If they converge, the
+                    # vanishing point is lower than assumed (camera pitched down, road slope), and vice versa.
+                    self.vp_y = np.clip(self.vp_y + PITCH_GAIN * (widths[-1] - widths[0]), *self.vp_limits)
+                return
+        self.misses += 1
+        self.tracking = False
+        if self.misses > MAX_MISSES:
+            self.fit = None
+
+    def plausible(self, fit, widths, car_x):
+        """A lane has a normal width at the car, nearly parallel lines that bend alike, the car inside it,
+        and its width does not jump between frames."""
+        if len(widths) < 2:
+            return False
+        previous = lane_widths_m(self.fit, self.ym) if self.fit is not None else widths
+        curvature_diff = abs(curvature(fit[0], self.ym) - curvature(fit[1], self.ym))
+        return (LANE_WIDTH_M[0] < widths[-1] < LANE_WIDTH_M[1] and np.ptp(widths) < MAX_WIDTH_CHANGE_M
+                and abs(curvature_and_offset(fit, car_x, self.ym)[1]) < MAX_OFFSET_M
+                and curvature_diff < MAX_CURVATURE_DIFF
+                and (len(previous) == 0 or abs(widths[-1] - previous[-1]) < MAX_WIDTH_JUMP_M))

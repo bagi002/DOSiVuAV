@@ -26,7 +26,7 @@ def process_video(path, out_dir):
     size = (int(video.get(cv2.CAP_PROP_FRAME_WIDTH)), int(video.get(cv2.CAP_PROP_FRAME_HEIGHT)))
     out = cv2.VideoWriter(str(out_dir / path.name), cv2.VideoWriter_fourcc(*"mp4v"),
                           video.get(cv2.CAP_PROP_FPS), size)
-    detector = LaneDetector()  # one detector for all frames
+    detector = LaneDetector()  # one detector for all frames: the lane is tracked between them
     while True:
         ok, frame = video.read()
         if not ok:
