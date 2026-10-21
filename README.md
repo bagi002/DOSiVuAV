@@ -28,15 +28,15 @@ objašnjen u tački 2 pipeline-a za pojedinačne slike.
 
 #### 1. Ukratko opišite kako ste izračunali matricu kamere i koeficijente distorzije. Priložite primer kalibracione slike sa ispravljenom distorzijom.
 
-Kod je funkcija `calibrate` ([src/pipeline.py:47-69](src/pipeline.py#L47-L69)). Detektor je poziva jednom, a rezultat se
+Kod je funkcija `calibrate` ([src/pipeline.py:48-70](src/pipeline.py#L48-L70)). Detektor je poziva jednom, a rezultat se
 čuva u `sources/camera_cal/calib.npz`.
 
-1. **Tačke objekta** ([src/pipeline.py:53-54](src/pipeline.py#L53-L54)): šahovska tabla ima 9x6 unutrašnjih uglova.
+1. **Tačke objekta** ([src/pipeline.py:54-55](src/pipeline.py#L54-L55)): šahovska tabla ima 9x6 unutrašnjih uglova.
    Njihove koordinate na tabli su `(x, y, 0)` u mreži. Tabla je ravna (z = 0), pa se isti niz koristi za svaku sliku.
-2. **Tačke slike** ([src/pipeline.py:58-63](src/pipeline.py#L58-L63)): `cv2.findChessboardCorners` traži uglove na sivoj
+2. **Tačke slike** ([src/pipeline.py:59-64](src/pipeline.py#L59-L64)): `cv2.findChessboardCorners` traži uglove na sivoj
    slici, a `cv2.cornerSubPix` ih precizira na nivo ispod piksela. Uglovi su pronađeni na **17 od 20** slika. Na
    `calibration1.jpg`, `calibration4.jpg` i `calibration5.jpg` deo table je van kadra, pa se te slike preskaču.
-3. **Kalibracija** ([src/pipeline.py:66](src/pipeline.py#L66)): `cv2.calibrateCamera` prilagođava pinhole model kamere
+3. **Kalibracija** ([src/pipeline.py:67](src/pipeline.py#L67)): `cv2.calibrateCamera` prilagođava pinhole model kamere
    (predavanje 09) svim parovima tačaka. Matrica kamere sadrži žižne daljine `fx, fy` i glavnu tačku `cx, cy`.
    Koeficijenti distorzije opisuju radijalnu (`k1, k2, k3`) i tangencijalnu (`p1, p2`) distorziju sočiva. RMS greška
    reprojekcije je **1,00 px**.
@@ -48,7 +48,7 @@ Matrica kamere:                        Koeficijenti distorzije (k1, k2, p1, p2, 
  [   0.00     0.00     1.00]]
 ```
 
-4. **Korekcija distorzije** ([src/pipeline.py:173-174](src/pipeline.py#L173-L174)): `cv2.undistort` se primenjuje samo na
+4. **Korekcija distorzije** ([src/pipeline.py:221-222](src/pipeline.py#L221-L222)): `cv2.undistort` se primenjuje samo na
    kadrove kalibrisane kamere (1280x720). Video snimci 960x540 su sa druge kamere, a za nju nema slika šahovske table.
 
 Korekcija primenjena na `calibration1.jpg`. Ova slika nije korišćena za kalibraciju, pa je nezavisna provera: linije
@@ -67,8 +67,8 @@ i belo vozilo desno menjaju oblik i položaj.
 
 #### 2. Opišite kako (i navedite gde u kodu) ste koristili transformacije boja, gradijente ili druge metode za kreiranje binarne slike dobijene pragovanjem. Priložite primer dobijene binarne slike.
 
-Kod je funkcija `binarize` ([src/pipeline.py:82-93](src/pipeline.py#L82-L93)), a njeni parametri su u
-[src/pipeline.py:31-34](src/pipeline.py#L31-L34).
+Kod je funkcija `binarize` ([src/pipeline.py:88-99](src/pipeline.py#L88-L99)), a njeni parametri su u
+[src/pipeline.py:32-35](src/pipeline.py#L32-L35).
 
 **Zašto pogled odozgo ide prvi.** Na pogledu odozgo (tačka 3) linija trake je svuda iste širine, 10-15 cm, što je
 17-26 px, jer je jedan piksel poprečno na put 5,8 mm. Veličina filtera zato može da se izabere u centimetrima i radi
@@ -99,8 +99,8 @@ binarnu sliku:
 
 #### 3. Opišite kako (i navedite gde u kodu) ste izvršili perspektivnu transformaciju i priložite primer transformisane slike.
 
-Kod je funkcija `perspective` ([src/pipeline.py:72-79](src/pipeline.py#L72-L79)), a opis kamere je u
-[src/pipeline.py:18-29](src/pipeline.py#L18-L29). Koristi se u [src/pipeline.py:175-176](src/pipeline.py#L175-L176).
+Kod je funkcija `perspective` ([src/pipeline.py:78-85](src/pipeline.py#L78-L85)), a opis kamere je u
+[src/pipeline.py:18-30](src/pipeline.py#L18-L30). Koristi se u [src/pipeline.py:223-224](src/pipeline.py#L223-L224).
 
 Trapez na putu se preslikava na pravougaonik fiksnog platna 1280x720 koje gleda odozgo (`cv2.getPerspectiveTransform`
 i `cv2.warpPerspective`, predavanja 03 i 10). Na pravom putu stranice trapeza su linije trake, a one se seku u
@@ -129,11 +129,11 @@ Kamera 960x540 (`project_video01-02.mp4` i slike `solid*`) ima svoj opis, izmere
 
 #### 4. Opišite kako (i navedite gde u kodu) ste identifikovali piksele linija trake i fitovali njihove pozicije polinomom.
 
-Kod je `lane_starts` ([src/pipeline.py:96-110](src/pipeline.py#L96-L110)), `sliding_windows`
-([src/pipeline.py:113-135](src/pipeline.py#L113-L135)) i `fit_line`
-([src/pipeline.py:138-160](src/pipeline.py#L138-L160)). Pozivaju se u
-[src/pipeline.py:178-181](src/pipeline.py#L178-L181), a parametri su u
-[src/pipeline.py:36-44](src/pipeline.py#L36-L44).
+Kod je `lane_starts` ([src/pipeline.py:102-116](src/pipeline.py#L102-L116)), `sliding_windows`
+([src/pipeline.py:119-141](src/pipeline.py#L119-L141)) i `fit_line`
+([src/pipeline.py:144-166](src/pipeline.py#L144-L166)). Pozivaju se u
+[src/pipeline.py:226-229](src/pipeline.py#L226-L229), a parametri su u
+[src/pipeline.py:37-45](src/pipeline.py#L37-L45).
 
 1. **Histogram** (histogram, predavanje 02; detekcija trake histogramom i kliznim prozorima, predavanje 10): kolone
    donje polovine binarne slike se sabiraju i zaglađuju. Dve linije počinju na paru kolona koji zajedno ima najviše
@@ -143,7 +143,7 @@ Kod je `lane_starts` ([src/pipeline.py:96-110](src/pipeline.py#L96-L110)), `slid
    pravu liniju.
 2. **Klizni prozori**: 9 prozora, visine 80 px i širine ±100 px, prati svaku liniju odozdo naviše. Prozor skuplja
    piksele u sebi, i ako ih ima više od 50, sledeći prozor se centrira na njihov srednji x. U prekidu isprekidane
-   linije prozor nastavlja u pravcu poslednjeg koraka ([src/pipeline.py:130-133](src/pipeline.py#L130-L133)), pa ne gubi
+   linije prozor nastavlja u pravcu poslednjeg koraka ([src/pipeline.py:136-139](src/pipeline.py#L136-L139)), pa ne gubi
    isprekidanu liniju u krivini.
 3. **Fit metodom RANSAC** (predavanje 04): model je polinom drugog reda `x = Ay² + By + C`. x je funkcija od y jer
    su linije skoro vertikalne, a kao funkcija od x ne bi imale jednu vrednost. U svakoj od 250 iteracija (broj iz
@@ -167,7 +167,52 @@ duž jedne parabole:
 
 #### 5. Opišite kako (i navedite gde u kodu) ste izračunali poluprečnik zakrivljenosti trake i poziciju vozila u odnosu na centar.
 
+Kod je `curvature` ([src/pipeline.py:169-177](src/pipeline.py#L169-L177)) i `curvature_and_offset`
+([src/pipeline.py:180-185](src/pipeline.py#L180-L185)), razmera je u
+[src/pipeline.py:28-29](src/pipeline.py#L28-L29) i `ym_per_px` ([src/pipeline.py:73-75](src/pipeline.py#L73-L75)),
+a položaj vozila u [src/pipeline.py:226](src/pipeline.py#L226).
+
+**Pikseli u metre.**
+
+- Poprečno na put: traka je široka 3,7 m (američki standard, 12 stopa) i 640 px na platnu, pa je 1 px = 5,8 mm.
+- Duž puta, razmera sledi iz kalibracije (pinhole model, predavanje 09). Tačka na putu u redu slike y je na
+  udaljenosti `Z = h·fy / (y - y_vp)`, gde je h visina kamere, a `y_vp = 419` red nedogledne tačke. U donjem redu traka
+  je široka 900 px, pa je `900 = 3,7·fx / Z`, odakle je `Z = 4,75 m` i h = 1,24 m. Gornja ivica trapeza je na 13,5 %
+  puta naniže od nedogledne tačke, pa je udaljena `4,75 / 0,135 = 35,2 m`. Platno zato prikazuje **30,5 m** puta, i
+  1 px = 4,2 cm. Trapez je pravougaonik na putu, pa je platno umanjeni pogled odozgo i ova razmera je ista svuda na
+  njemu.
+- Nezavisna provera: na platnu se isprekidana linija ponavlja na svakih 338-365 px, što je 14,1-15,2 m. Na
+  autoputevima u Kaliforniji crta je duga 12 stopa, a razmak 36 stopa, što je ukupno 14,6 m.
+
+**Poluprečnik krivine.** Polinom se prevodi u metre sa `A_m = A·xm/ym²` i `B_m = B·xm/ym`. Njegova krivina je
+`κ = 2·A_m / (1 + (2·A_m·y + B_m)²)^1.5`, računa se u donjem redu, kod vozila, a poluprečnik je `R = 1/|κ|`. Računa
+se za središnju liniju trake (srednja vrednost levog i desnog polinoma), što daje jednu vrednost sa manje šuma nego
+bilo koja od linija.
+
+**Položaj vozila.** Kamera je na sredini vozila, pa je vozilo na sredini donjeg reda slike. Njegov položaj na platnu
+se dobija transformacijom te tačke istom matricom: x = 628, a ne 640, jer trapez nije potpuno simetričan. Pomeraj je
+`(car_x - centar trake na dnu) · xm`, pozitivan udesno.
+
+Rezultati na test slikama (izlaz komande `python main.py sources/test_images/`):
+
+| Slika | Poluprečnik krivine | Pomeraj vozila |
+|---|---|---|
+| test1.jpg | 853 m | 0,26 m levo |
+| test2.jpg | 557 m | 0,35 m levo |
+| test3.jpg | 1030 m | 0,19 m levo |
+| test4.jpg | 939 m | 0,38 m levo |
+| test5.jpg | 787 m | 0,06 m levo |
+| test6.jpg | 959 m | 0,34 m levo |
+| straight_lines1.jpg | 17,5 km (pravo) | 0,07 m levo |
+| straight_lines2.jpg | 7,3 km (pravo) | 0,09 m levo |
+
 #### 6. Priložite primer slike sa rezultatom iscrtanim nazad na put, tako da je oblast trake jasno označena.
+
+Kod je `draw_lane` ([src/pipeline.py:188-205](src/pipeline.py#L188-L205)). Na praznom platnu oblast između dva polinoma se
+boji zeleno, a obe linije se crtaju duž polinoma kao debele crvene krive. Platno se inverznom matricom `Minv` vraća
+na kadar i meša sa njim pomoću `cv2.addWeighted`. Poluprečnik i pomeraj se ispisuju u gornjem levom uglu.
+
+![Rezultati na test slikama](docs/result.jpg)
 
 ### Pipeline (video)
 

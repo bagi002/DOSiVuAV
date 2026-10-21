@@ -15,7 +15,10 @@ VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
 
 
 def process_image(path, out_dir):
-    cv2.imwrite(str(out_dir / path.name), LaneDetector()(cv2.imread(str(path))))
+    detector = LaneDetector()
+    cv2.imwrite(str(out_dir / path.name), detector(cv2.imread(str(path))))
+    if detector.fit is not None:
+        print(f"  radius of curvature {detector.radius:.0f} m, vehicle offset {detector.offset:+.2f} m")
 
 
 def process_video(path, out_dir):

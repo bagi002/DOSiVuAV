@@ -26,6 +26,7 @@ CAMERAS = {
 }
 DST = np.float32([(320, 0), (960, 0), (960, 720), (320, 720)])
 XM_PER_PX = 3.7 / 640  # lane width (3.7 m) is 640 px on the canvas
+Z_BOTTOM_M = 4.75      # distance from the camera to the road in the bottom row of the frame
 LOOK_AHEAD = 0.135     # top edge of the trapezoid, as a fraction of the way from the vanishing point down
 
 # Binary image: lane paint is a bright (L) or yellow (b) stripe narrower than the top-hat kernel
@@ -67,6 +68,11 @@ def calibrate():
     print(f"Calibration: chessboard found on {len(obj_points)}/{len(paths)} images, RMS error {rms:.2f} px")
     np.savez(CALIB_FILE, mtx=mtx, dist=dist, size=size)
     return mtx, dist, size
+
+
+def ym_per_px(look_ahead):
+    """Meters per canvas row: the canvas shows the road from Z_BOTTOM_M to Z_BOTTOM_M / look_ahead."""
+    return Z_BOTTOM_M * (1 / look_ahead - 1) / WARP_SIZE[1]
 
 
 def perspective(frame_size):
@@ -160,12 +166,54 @@ def fit_line(ys, xs, rng):
     return np.polyfit(ys[inliers], xs[inliers], 2)
 
 
+def curvature(line, ym):
+    """Signed curvature (1/m) of a canvas polynomial at the car (bottom row).
+
+    The polynomial is converted to meters, x_m = A_m y_m^2 + B_m y_m + C_m with A_m = A * xm / ym^2 and
+    B_m = B * xm / ym, and the curvature is 2 A_m / (1 + (2 A_m y_m + B_m)^2)^1.5 = 1 / R.
+    """
+    a, b = line[0] * XM_PER_PX / ym ** 2, line[1] * XM_PER_PX / ym
+    y = WARP_SIZE[1] * ym
+    return 2 * a / (1 + (2 * a * y + b) ** 2) ** 1.5
+
+
+def curvature_and_offset(fit, car_x, ym):
+    """Radius of curvature of the lane center (m) and offset of the car from it (m, + = right)."""
+    center = fit.mean(axis=0)
+    radius = 1 / max(abs(curvature(center, ym)), 1e-9)
+    offset = (car_x - np.polyval(center, WARP_SIZE[1])) * XM_PER_PX
+    return radius, offset
+
+
+def draw_lane(undist, fit, Minv, radius, offset):
+    """Lane area painted on the canvas, warped back onto the frame, with radius and offset as text."""
+    y = np.linspace(0, WARP_SIZE[1], 30)
+    left, right = (np.column_stack([np.polyval(line, y), y]) for line in fit)
+    lane = np.zeros((WARP_SIZE[1], WARP_SIZE[0], 3), np.uint8)
+    cv2.fillPoly(lane, [np.vstack([left, right[::-1]]).astype(np.int32)], (0, 255, 0))
+    cv2.polylines(lane, [left.astype(np.int32), right.astype(np.int32)], False, (0, 0, 255), 20)
+    out = cv2.addWeighted(undist, 1, cv2.warpPerspective(lane, Minv, undist.shape[1::-1]), 0.4, 0)
+
+    side = "right" if offset > 0 else "left"
+    lines = [f"Radius of curvature: {radius:.0f} m" if radius < 5000 else "Radius of curvature: > 5 km",
+             f"Vehicle is {abs(offset):.2f} m {side} of center"]
+    scale = undist.shape[1] / 1280
+    for i, text in enumerate(lines):
+        for color, thickness in [((0, 0, 0), 6), ((255, 255, 255), 2)]:  # white text with a dark outline
+            cv2.putText(out, text, (int(30 * scale), int((50 + 45 * i) * scale)), cv2.FONT_HERSHEY_SIMPLEX,
+                        1.2 * scale, color, thickness, cv2.LINE_AA)
+    return out
+
+
 class LaneDetector:
     """The whole pipeline: detector(frame) returns the processed frame."""
 
     def __init__(self):
         self.mtx, self.dist, self.calib_size = calibrate()
         self.rng = np.random.default_rng(0)  # RANSAC samples: the same input always gives the same result
+        self.ym = ym_per_px(LOOK_AHEAD)      # meters per canvas row
+        self.fit = None    # (left, right) polynomials on the canvas
+        self.radius = self.offset = None  # last measurement, in meters
 
     def __call__(self, frame):
         h, w = frame.shape[:2]
@@ -180,12 +228,10 @@ class LaneDetector:
         masks, _ = sliding_windows(binary, car_x)
         lines = [fit_line(ys[mask], xs[mask], self.rng) for mask in masks]
 
-        # For now: the lane pixels and the fitted polynomials on the bird's-eye view
-        out = cv2.cvtColor(binary * 90, cv2.COLOR_GRAY2BGR)
-        y = np.arange(WARP_SIZE[1])
-        for mask, line in zip(masks, lines):
-            out[ys[mask], xs[mask]] = (255, 255, 255)
-            if line is not None:
-                curve = np.int32(np.column_stack([np.polyval(line, y), y]))
-                cv2.polylines(out, [curve], False, (0, 0, 255), 6)
-        return out
+        if lines[0] is None or lines[1] is None:
+            self.fit = None
+            return undist
+
+        self.fit = np.array(lines)
+        self.radius, self.offset = curvature_and_offset(self.fit, car_x, self.ym)
+        return draw_lane(undist, self.fit, Minv, self.radius, self.offset)
