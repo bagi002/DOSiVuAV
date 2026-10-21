@@ -28,15 +28,15 @@ objašnjen u tački 2 pipeline-a za pojedinačne slike.
 
 #### 1. Ukratko opišite kako ste izračunali matricu kamere i koeficijente distorzije. Priložite primer kalibracione slike sa ispravljenom distorzijom.
 
-Kod je funkcija `calibrate` ([src/pipeline.py:36-58](src/pipeline.py#L36-L58)). Detektor je poziva jednom, a rezultat se
+Kod je funkcija `calibrate` ([src/pipeline.py:47-69](src/pipeline.py#L47-L69)). Detektor je poziva jednom, a rezultat se
 čuva u `sources/camera_cal/calib.npz`.
 
-1. **Tačke objekta** ([src/pipeline.py:42-43](src/pipeline.py#L42-L43)): šahovska tabla ima 9x6 unutrašnjih uglova.
+1. **Tačke objekta** ([src/pipeline.py:53-54](src/pipeline.py#L53-L54)): šahovska tabla ima 9x6 unutrašnjih uglova.
    Njihove koordinate na tabli su `(x, y, 0)` u mreži. Tabla je ravna (z = 0), pa se isti niz koristi za svaku sliku.
-2. **Tačke slike** ([src/pipeline.py:47-52](src/pipeline.py#L47-L52)): `cv2.findChessboardCorners` traži uglove na sivoj
+2. **Tačke slike** ([src/pipeline.py:58-63](src/pipeline.py#L58-L63)): `cv2.findChessboardCorners` traži uglove na sivoj
    slici, a `cv2.cornerSubPix` ih precizira na nivo ispod piksela. Uglovi su pronađeni na **17 od 20** slika. Na
    `calibration1.jpg`, `calibration4.jpg` i `calibration5.jpg` deo table je van kadra, pa se te slike preskaču.
-3. **Kalibracija** ([src/pipeline.py:55](src/pipeline.py#L55)): `cv2.calibrateCamera` prilagođava pinhole model kamere
+3. **Kalibracija** ([src/pipeline.py:66](src/pipeline.py#L66)): `cv2.calibrateCamera` prilagođava pinhole model kamere
    (predavanje 09) svim parovima tačaka. Matrica kamere sadrži žižne daljine `fx, fy` i glavnu tačku `cx, cy`.
    Koeficijenti distorzije opisuju radijalnu (`k1, k2, k3`) i tangencijalnu (`p1, p2`) distorziju sočiva. RMS greška
    reprojekcije je **1,00 px**.
@@ -48,7 +48,7 @@ Matrica kamere:                        Koeficijenti distorzije (k1, k2, p1, p2, 
  [   0.00     0.00     1.00]]
 ```
 
-4. **Korekcija distorzije** ([src/pipeline.py:94-95](src/pipeline.py#L94-L95)): `cv2.undistort` se primenjuje samo na
+4. **Korekcija distorzije** ([src/pipeline.py:173-174](src/pipeline.py#L173-L174)): `cv2.undistort` se primenjuje samo na
    kadrove kalibrisane kamere (1280x720). Video snimci 960x540 su sa druge kamere, a za nju nema slika šahovske table.
 
 Korekcija primenjena na `calibration1.jpg`. Ova slika nije korišćena za kalibraciju, pa je nezavisna provera: linije
@@ -67,8 +67,8 @@ i belo vozilo desno menjaju oblik i položaj.
 
 #### 2. Opišite kako (i navedite gde u kodu) ste koristili transformacije boja, gradijente ili druge metode za kreiranje binarne slike dobijene pragovanjem. Priložite primer dobijene binarne slike.
 
-Kod je funkcija `binarize` ([src/pipeline.py:71-82](src/pipeline.py#L71-L82)), a njeni parametri su u
-[src/pipeline.py:30-33](src/pipeline.py#L30-L33).
+Kod je funkcija `binarize` ([src/pipeline.py:82-93](src/pipeline.py#L82-L93)), a njeni parametri su u
+[src/pipeline.py:31-34](src/pipeline.py#L31-L34).
 
 **Zašto pogled odozgo ide prvi.** Na pogledu odozgo (tačka 3) linija trake je svuda iste širine, 10-15 cm, što je
 17-26 px, jer je jedan piksel poprečno na put 5,8 mm. Veličina filtera zato može da se izabere u centimetrima i radi
@@ -99,8 +99,8 @@ binarnu sliku:
 
 #### 3. Opišite kako (i navedite gde u kodu) ste izvršili perspektivnu transformaciju i priložite primer transformisane slike.
 
-Kod je funkcija `perspective` ([src/pipeline.py:61-68](src/pipeline.py#L61-L68)), a opis kamere je u
-[src/pipeline.py:18-28](src/pipeline.py#L18-L28). Koristi se u [src/pipeline.py:96-97](src/pipeline.py#L96-L97).
+Kod je funkcija `perspective` ([src/pipeline.py:72-79](src/pipeline.py#L72-L79)), a opis kamere je u
+[src/pipeline.py:18-29](src/pipeline.py#L18-L29). Koristi se u [src/pipeline.py:175-176](src/pipeline.py#L175-L176).
 
 Trapez na putu se preslikava na pravougaonik fiksnog platna 1280x720 koje gleda odozgo (`cv2.getPerspectiveTransform`
 i `cv2.warpPerspective`, predavanja 03 i 10). Na pravom putu stranice trapeza su linije trake, a one se seku u
@@ -128,6 +128,42 @@ Kamera 960x540 (`project_video01-02.mp4` i slike `solid*`) ima svoj opis, izmere
 `solidWhiteRight.jpg`: nedogledna tačka (478, 307) i donje tačke 150 i 850.
 
 #### 4. Opišite kako (i navedite gde u kodu) ste identifikovali piksele linija trake i fitovali njihove pozicije polinomom.
+
+Kod je `lane_starts` ([src/pipeline.py:96-110](src/pipeline.py#L96-L110)), `sliding_windows`
+([src/pipeline.py:113-135](src/pipeline.py#L113-L135)) i `fit_line`
+([src/pipeline.py:138-160](src/pipeline.py#L138-L160)). Pozivaju se u
+[src/pipeline.py:178-181](src/pipeline.py#L178-L181), a parametri su u
+[src/pipeline.py:36-44](src/pipeline.py#L36-L44).
+
+1. **Histogram** (histogram, predavanje 02; detekcija trake histogramom i kliznim prozorima, predavanje 10): kolone
+   donje polovine binarne slike se sabiraju i zaglađuju. Dve linije počinju na paru kolona koji zajedno ima najviše
+   piksela linija, ima vozilo između sebe i udaljen je za širinu trake (2,5-4,3 m, prednost imaju parovi blizu 3,7 m).
+   Uzimanje najvišeg vrha sa svake strane ne radi kada je desna linija isprekidana, a na betonu pored nje postoji
+   pukotina ili mrlja: na `test1.jpg` obe imaju približno isti broj piksela, i tek par na pravoj udaljenosti bira
+   pravu liniju.
+2. **Klizni prozori**: 9 prozora, visine 80 px i širine ±100 px, prati svaku liniju odozdo naviše. Prozor skuplja
+   piksele u sebi, i ako ih ima više od 50, sledeći prozor se centrira na njihov srednji x. U prekidu isprekidane
+   linije prozor nastavlja u pravcu poslednjeg koraka ([src/pipeline.py:130-133](src/pipeline.py#L130-L133)), pa ne gubi
+   isprekidanu liniju u krivini.
+3. **Fit metodom RANSAC** (predavanje 04): model je polinom drugog reda `x = Ay² + By + C`. x je funkcija od y jer
+   su linije skoro vertikalne, a kao funkcija od x ne bi imale jednu vrednost. U svakoj od 250 iteracija (broj iz
+   predavanja 04) bira se po jedan piksel iz svake trećine linije, sortirane po y, i kroz te tri tačke se provlači
+   parabola. Piksel na manje od 30 px od parabole je inlier. Pobeđuje parabola sa najviše inliera, a konačni fit je
+   metoda najmanjih kvadrata (`np.polyfit`) samo na njenim inlierima. Svih 250 parabola se računa odjednom pomoću
+   numpy-ja, pa to košta otprilike koliko i jedan fit najmanjim kvadratima.
+4. **Da li je to uopšte linija?** Linija trake je tanka, pa skoro svi pikseli oko nje leže na njoj: na
+   `project_video03.mp4`, `challenge01.mp4` i `challenge02.mp4` najmanje 94 % piksela svake linije su inlieri.
+   Sunčeve mrlje i lišće umesto toga popunjavaju ceo prozor. Ako je inliera manje od 60 %, u tom kadru nema linije
+   (na `challenge03.mp4` takve odbačene „linije“ imaju medijanu od 44 % inliera). Liniji treba i najmanje 300 piksela.
+Klizni prozori (zeleno) na `test3.jpg`, sa pikselima leve linije u crvenoj, desne u plavoj boji i polinomima u žutoj:
+
+![Pikseli linija i fit polinomom](docs/fit.jpg)
+
+Zašto RANSAC, a ne samo najmanji kvadrati: na ovom kadru iz `challenge03.mp4` desni prozor je pokupio deo šuma pored
+linije. Najmanji kvadrati savijaju parabolu prema svakom pikselu, dok RANSAC drži krivu na pikselima koji zaista leže
+duž jedne parabole:
+
+![Najmanji kvadrati i RANSAC](docs/ransac.jpg)
 
 #### 5. Opišite kako (i navedite gde u kodu) ste izračunali poluprečnik zakrivljenosti trake i poziciju vozila u odnosu na centar.
 
