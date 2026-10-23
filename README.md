@@ -4,13 +4,15 @@
 
 #### 1. Priložite izveštaj koji obuhvata sve tačke kriterijuma ocenjivanja i način na koji ste odgovorili na svaku od njih.
 
-Upravo ga čitate! Svaka tačka kriterijuma je opisana u nastavku, zajedno sa lokacijom koda koji je implementira i
-primerom rezultata. Sve slike su u [docs/](docs/).
+Ovaj README je ujedno i izveštaj. Za svaku tačku kriterijuma u nastavku su opisani postupak, mesto u kodu i primer
+rezultata. Sve slike i obrađeni snimci nalaze se u folderu [docs/](docs/).
 
-- [src/pipeline.py](src/pipeline.py) je pipeline: svaki kadar prolazi kroz isti niz filtera, a klasa `LaneDetector`
-  ih poziva redom.
+Projekat čine tri fajla:
+
+- [src/pipeline.py](src/pipeline.py) sadrži ceo pipeline. Svaki kadar prolazi kroz isti niz koraka, a redom ih
+  poziva klasa `LaneDetector`.
 - [main.py](main.py) prima sliku, folder sa slikama ili video i čuva rezultat.
-- [src/make_docs.py](src/make_docs.py) ponovo pravi sve slike i video snimke u `docs/` koje koristi ovaj izveštaj.
+- [src/make_docs.py](src/make_docs.py) pravi sve slike i snimke koji se koriste u ovom izveštaju.
 
 ```bash
 python3 -m venv .venv
@@ -20,28 +22,29 @@ pip install -r requirements.txt
 python main.py sources/test_images/test1.jpg           # -> output_images/test1.jpg
 python main.py sources/test_images/                    # sve slike u folderu
 python main.py sources/test_videos/project_video03.mp4 # -> output_videos/project_video03.mp4
-python src/make_docs.py                                # ponovo pravi sve slike i video snimke u docs/
+python src/make_docs.py                                # ponovo pravi slike i snimke u docs/
 ```
 
-Jedna razlika u odnosu na redosled iz šablona: perspektivna transformacija se radi **pre** pragovanja. Razlog je
-objašnjen u tački 2 pipeline-a za pojedinačne slike.
+Redosled koraka se u jednom detalju razlikuje od šablona: perspektivnu transformaciju radim **pre** pragovanja.
+Zašto je tako, objašnjeno je u tački 2 dela o pojedinačnim slikama.
 
 ### Kalibracija kamere
 
 #### 1. Ukratko opišite kako ste izračunali matricu kamere i koeficijente distorzije. Priložite primer kalibracione slike sa ispravljenom distorzijom.
 
-Kod je funkcija `calibrate` ([src/pipeline.py:64-86](src/pipeline.py#L64-L86)). Detektor je poziva jednom, a rezultat se
-čuva u `sources/camera_cal/calib.npz`.
+Kalibraciju radi funkcija `calibrate` ([src/pipeline.py:64-86](src/pipeline.py#L64-L86)). Poziva se samo jednom, a
+rezultat se čuva u `sources/camera_cal/calib.npz`, pa se pri sledećem pokretanju samo učita.
 
-1. **Tačke objekta** ([src/pipeline.py:70-71](src/pipeline.py#L70-L71)): šahovska tabla ima 9x6 unutrašnjih uglova.
-   Njihove koordinate na tabli su `(x, y, 0)` u mreži. Tabla je ravna (z = 0), pa se isti niz koristi za svaku sliku.
-2. **Tačke slike** ([src/pipeline.py:75-80](src/pipeline.py#L75-L80)): `cv2.findChessboardCorners` traži uglove na sivoj
-   slici, a `cv2.cornerSubPix` ih precizira na nivo ispod piksela. Uglovi su pronađeni na **17 od 20** slika. Na
-   `calibration1.jpg`, `calibration4.jpg` i `calibration5.jpg` deo table je van kadra, pa se te slike preskaču.
-3. **Kalibracija** ([src/pipeline.py:83](src/pipeline.py#L83)): `cv2.calibrateCamera` prilagođava pinhole model kamere
-   (predavanje 09) svim parovima tačaka. Matrica kamere sadrži žižne daljine `fx, fy` i glavnu tačku `cx, cy`.
-   Koeficijenti distorzije opisuju radijalnu (`k1, k2, k3`) i tangencijalnu (`p1, p2`) distorziju sočiva. RMS greška
-   reprojekcije je **1,00 px**.
+1. **Tačke objekta** ([src/pipeline.py:70-71](src/pipeline.py#L70-L71)): šahovska tabla ima 9x6 unutrašnjih uglova,
+   čije su koordinate na tabli `(x, y, 0)`. Pošto je tabla ravna (z = 0), isti niz tačaka važi za svaku sliku.
+2. **Tačke slike** ([src/pipeline.py:75-80](src/pipeline.py#L75-L80)): na sivoj slici uglove pronalazi
+   `cv2.findChessboardCorners`, a `cv2.cornerSubPix` ih zatim precizira ispod nivoa piksela. Tabla je pronađena na
+   **17 od 20** slika. Na `calibration1.jpg`, `calibration4.jpg` i `calibration5.jpg` deo table je van kadra, pa se te
+   slike preskaču.
+3. **Kalibracija** ([src/pipeline.py:83](src/pipeline.py#L83)): `cv2.calibrateCamera` na osnovu svih parova tačaka
+   računa parametre pinhole modela kamere (predavanje 09). Matrica kamere sadrži žižne daljine `fx, fy` i glavnu tačku
+   `cx, cy`, a koeficijenti distorzije opisuju radijalnu (`k1, k2, k3`) i tangencijalnu (`p1, p2`) distorziju sočiva.
+   RMS greška reprojekcije je **1,00 px**.
 
 ```
 Matrica kamere:                        Koeficijenti distorzije (k1, k2, p1, p2, k3):
@@ -50,11 +53,12 @@ Matrica kamere:                        Koeficijenti distorzije (k1, k2, p1, p2, 
  [   0.00     0.00     1.00]]
 ```
 
-4. **Korekcija distorzije** ([src/pipeline.py:293-294](src/pipeline.py#L293-L294)): `cv2.undistort` se primenjuje samo na
-   kadrove kalibrisane kamere (1280x720). Video snimci 960x540 su sa druge kamere, a za nju nema slika šahovske table.
+4. **Korekcija distorzije** ([src/pipeline.py:293-294](src/pipeline.py#L293-L294)): `cv2.undistort` se primenjuje
+   samo na kadrove kalibrisane kamere (1280x720). Snimci rezolucije 960x540 potiču sa druge kamere, a za nju nemamo
+   slike šahovske table.
 
-Korekcija primenjena na `calibration1.jpg`. Ova slika nije korišćena za kalibraciju, pa je nezavisna provera: linije
-table koje je radijalna distorzija iskrivila sada su prave.
+Na slici je korekcija primenjena na `calibration1.jpg`. Ta slika nije učestvovala u kalibraciji, pa je dobra
+nezavisna provera: linije table koje je radijalna distorzija savila sada su prave.
 
 ![Šahovska tabla bez distorzije](docs/calibration.jpg)
 
@@ -62,57 +66,60 @@ table koje je radijalna distorzija iskrivila sada su prave.
 
 #### 1. Priložite primer slike sa ispravljenom distorzijom.
 
-Ista korekcija je prvi filter za svaki kadar. Na `test1.jpg` razlika se najviše vidi na ivicama slike: hauba na dnu
-i belo vozilo desno menjaju oblik i položaj.
+Korekcija distorzije je prvi korak za svaki kadar. Na `test1.jpg` razlika se najbolje vidi na ivicama slike: hauba
+na dnu i belo vozilo desno menjaju oblik i položaj.
 
 ![Slika puta bez distorzije](docs/undistort.jpg)
 
 #### 2. Opišite kako (i navedite gde u kodu) ste koristili transformacije boja, gradijente ili druge metode za kreiranje binarne slike dobijene pragovanjem. Priložite primer dobijene binarne slike.
 
-Kod je funkcija `binarize` ([src/pipeline.py:109-120](src/pipeline.py#L109-L120)), a njeni parametri su u
-[src/pipeline.py:36-39](src/pipeline.py#L36-L39).
+Binarnu sliku pravi funkcija `binarize` ([src/pipeline.py:109-120](src/pipeline.py#L109-L120)), a njeni parametri
+su u [src/pipeline.py:36-39](src/pipeline.py#L36-L39).
 
-**Zašto pogled odozgo ide prvi.** Na pogledu odozgo (tačka 3) linija trake je svuda iste širine, 10-15 cm, što je
-17-26 px, jer je jedan piksel poprečno na put 5,8 mm. Veličina filtera zato može da se izabere u centimetrima i radi
-isto i kod vozila i 30 m ispred njega. Pored toga, sve iznad puta (nebo, drveće, druga vozila) više nije na slici.
+**Zašto prvo pogled odozgo.** U pogledu odozgo (tačka 3) linija trake je svuda iste širine, 10-15 cm, odnosno
+17-26 px, jer jedan piksel poprečno na put odgovara 5,8 mm. Veličinu filtera zato mogu da zadam u centimetrima i ona
+važi podjednako kod vozila i 30 m ispred njega. Uz to, sve što je iznad puta (nebo, drveće, druga vozila) ispada iz
+slike.
 
 Koraci:
 
 1. **Gausov filter 5x5** uklanja šum (predavanje 02).
-2. **BGR → LAB.** L je svetlina. b je plavo-žuta osa, na kojoj se žuta boja ističe i na suncu i u senci (prostori
-   boja i filtriranje po boji, predavanja 00 i 06).
+2. **Prelazak iz BGR u LAB.** L je svetlina, a b plavo-žuta osa, na kojoj se žuta boja izdvaja i na suncu i u senci
+   (prostori boja i filtriranje po boji, predavanja 00 i 06).
 3. **Morfološki top-hat** (morfološko filtriranje, predavanje 06): `tophat = I - opening(I)`. Otvaranje (opening)
-   horizontalnim kernelom 1x61 (35 cm) uklanja svaku svetlu strukturu užu od 35 cm. Razlika zato zadržava upravo te
-   strukture: boju na putu. Široke svetle površine (svetao beton, belo vozilo) i tamne strukture (spojevi od katrana,
-   senke, ivica između dve vrste asfalta) ne daju odziv. Odziv se meri u odnosu na lokalnu pozadinu, pa isti prag
-   radi i na tamnom asfaltu i na svetlom betonu.
-4. **Pragovanje**: piksel pripada liniji ako je top-hat kanala L veći od 30 (bela i žuta boja) **ili** je top-hat
+   horizontalnim kernelom 1x61 (35 cm) briše svaku svetlu strukturu užu od 35 cm, pa razlika zadržava upravo njih, a to
+   je boja na kolovozu. Široke svetle površine (svetao beton, belo vozilo) i tamne strukture (spojevi od katrana,
+   senke, ivica između dve vrste asfalta) ne daju odziv. Pošto se odziv meri u odnosu na okolinu, isti prag radi i na
+   tamnom asfaltu i na svetlom betonu.
+4. **Pragovanje**: piksel pripada liniji ako je top-hat kanala L veći od 30 (bela i žuta boja) **ili** ako je top-hat
    kanala b veći od 8 (žuta boja, i u senci, gde joj je svetlina mala).
 
-Pragovi su podešeni na `test1-6.jpg`, `straight_lines1-2.jpg` i kadrovima iz svih šest snimaka. Na asfaltu boja
-dostiže vrednosti 100-160 u top-hat-u kanala L, dok je na test slikama 95 % svih piksela pogleda odozgo ispod 21. Na
-svetlom betonu kontrast je mnogo manji, i tu žutu liniju nalazi uglavnom sloj b.
+Pragove sam podesio na `test1-6.jpg`, `straight_lines1-2.jpg` i kadrovima iz svih šest snimaka. Na asfaltu boja u
+top-hat-u kanala L dostiže 100-160, dok je na test slikama 95 % piksela pogleda odozgo ispod 21. Na svetlom betonu
+kontrast je mnogo manji, pa tamo žutu liniju uglavnom nalazi sloj b.
 
-Redovi ispod prikazuju `test5.jpg` (senke drveća na betonu), `test4.jpg` (prelaz sa betona na asfalt) i kadar iz
-`challenge02.mp4` (spojevi od katrana pored linija). Kolone prikazuju pogled odozgo, oba top-hat odziva i konačnu
-binarnu sliku:
+Redovi na slici su `test5.jpg` (senke drveća na betonu), `test4.jpg` (prelaz sa betona na asfalt) i kadar iz
+`challenge02.mp4` (spojevi od katrana pored linija). Kolone redom prikazuju pogled odozgo, oba top-hat odziva i
+konačnu binarnu sliku:
 
 ![Binarna slika](docs/binary.jpg)
 
 #### 3. Opišite kako (i navedite gde u kodu) ste izvršili perspektivnu transformaciju i priložite primer transformisane slike.
 
-Kod je funkcija `perspective` ([src/pipeline.py:99-106](src/pipeline.py#L99-L106)), a opis kamere je u
-[src/pipeline.py:18-34](src/pipeline.py#L18-L34). Koristi se u [src/pipeline.py:300-305](src/pipeline.py#L300-L305).
+Transformaciju radi funkcija `perspective` ([src/pipeline.py:99-106](src/pipeline.py#L99-L106)), opis kamere je u
+[src/pipeline.py:18-34](src/pipeline.py#L18-L34), a primenjuje se u
+[src/pipeline.py:300-305](src/pipeline.py#L300-L305).
 
-Trapez na putu se preslikava na pravougaonik fiksnog platna 1280x720 koje gleda odozgo (`cv2.getPerspectiveTransform`
-i `cv2.warpPerspective`, predavanja 03 i 10). Na pravom putu stranice trapeza su linije trake, a one se seku u
-**nedoglednoj tački** (vanishing point). Zato umesto četiri ručno izabrane tačke kameru opisujem njenom nedoglednom
-tačkom i x koordinatama na kojima linije trake seku donji red slike. Stranice trapeza idu od tih donjih tačaka do
-nedogledne tačke, a gornja ivica je na 13,5 % puta naniže od nedogledne tačke (red 460).
+Trapez na putu se preslikava na pravougaonik platna 1280x720 koje predstavlja pogled odozgo
+(`cv2.getPerspectiveTransform` i `cv2.warpPerspective`, predavanja 03 i 10). Na pravom putu stranice trapeza su
+same linije trake, a one se sastaju u **nedoglednoj tački** (vanishing point). Zato umesto četiri ručno izabrane
+tačke kameru opisujem nedoglednom tačkom i mestima na kojima linije trake seku donji red slike. Stranice trapeza idu od
+tih donjih tačaka ka nedoglednoj tački, a gornja ivica je na 13,5 % rastojanja od nedogledne tačke do dna slike
+(red 460).
 
-Merenje: na `straight_lines1.jpg` i `straight_lines2.jpg` bez distorzije fitovao sam pravu kroz piksele linija.
-Rezultat je `x = -1,44 y + 1245` (leva) i `x = 1,55 y - 9` (desna), koje se seku u nedoglednoj tački **(641, 419)**.
-U donjem redu linije su na x = 207 i x = 1107. Iz toga sledi:
+Merenje: na `straight_lines1.jpg` i `straight_lines2.jpg` posle korekcije distorzije provukao sam pravu kroz piksele
+svake linije. Dobio sam `x = -1,44 y + 1245` za levu i `x = 1,55 y - 9` za desnu liniju. One se seku u nedoglednoj
+tački **(641, 419)**, a donji red slike seku na x = 207 i x = 1107. Odatle sledi:
 
 | Izvor (slika) | Odredište (platno) |
 |---|---|
@@ -121,88 +128,97 @@ U donjem redu linije su na x = 207 i x = 1107. Iz toga sledi:
 | (1107, 720) | (960, 720) |
 | (207, 720) | (320, 720) |
 
-Provera: na `straight_lines1.jpg` obe linije su na platnu vertikalne i paralelne, a na `test2.jpg` se krivina vidi
-kao dve paralelne krive.
+Na `straight_lines1.jpg` obe linije na platnu leže tačno na stranicama crvenog pravougaonika, vertikalne i
+paralelne, što potvrđuje da je trapez dobro izabran. Pravougaonik važi samo za prav put, pa na `test2.jpg` linije
+skreću i pomerene su udesno, jer je vozilo 0,35 m levo od centra trake. Međusobno su i dalje paralelne: širina trake
+je oko 3,6 m celom dužinom platna. Gornji deo platna je mutniji jer je daleki put u originalnoj slici sitan pa se pri
+preslikavanju razvlači, a crni uglovi na dnu su delovi platna koji padaju van kadra kamere.
 
 ![Perspektivna transformacija](docs/perspective.jpg)
 
-Kamera 960x540 (`project_video01-02.mp4` i slike `solid*`) ima svoj opis, izmeren na isti način na
+Kamera 960x540 (`project_video01-02.mp4` i slike `solid*`) ima sopstveni opis, izmeren na isti način na
 `solidWhiteRight.jpg`: nedogledna tačka (478, 307) i donje tačke 150 i 850.
 
-U videu se trapez dodatno prilagođava putu (oba prilagođavanja su opisana u sekciji o videu): red nedogledne tačke
-prati nagib kamere, a u oštrim krivinama gornja ivica se spušta, pa platno prikazuje manje puta ispred vozila i
-linije ne izlaze iz njega kroz stranice.
+U videu se trapez dodatno prilagođava putu: red nedogledne tačke prati nagib kamere, a u oštrim krivinama gornja
+ivica se spušta, pa platno pokriva manje puta i linije ne izlaze sa strane. Oba prilagođavanja su opisana u delu o
+videu.
 
 #### 4. Opišite kako (i navedite gde u kodu) ste identifikovali piksele linija trake i fitovali njihove pozicije polinomom.
 
-Kod je `lane_starts` ([src/pipeline.py:123-137](src/pipeline.py#L123-L137)), `sliding_windows`
-([src/pipeline.py:140-162](src/pipeline.py#L140-L162)), `around_fit` ([src/pipeline.py:165-181](src/pipeline.py#L165-L181)) i
-`fit_line` ([src/pipeline.py:184-206](src/pipeline.py#L184-L206)). Pozivaju se u
-[src/pipeline.py:307-311](src/pipeline.py#L307-L311), a parametri su u [src/pipeline.py:41-49](src/pipeline.py#L41-L49).
+Za ovaj deo zadužene su funkcije `lane_starts` ([src/pipeline.py:123-137](src/pipeline.py#L123-L137)),
+`sliding_windows` ([src/pipeline.py:140-162](src/pipeline.py#L140-L162)), `around_fit`
+([src/pipeline.py:165-181](src/pipeline.py#L165-L181)) i `fit_line`
+([src/pipeline.py:184-206](src/pipeline.py#L184-L206)). Pozivaju se u
+[src/pipeline.py:307-311](src/pipeline.py#L307-L311), a parametri su u
+[src/pipeline.py:41-49](src/pipeline.py#L41-L49).
 
 1. **Histogram** (histogram, predavanje 02; detekcija trake histogramom i kliznim prozorima, predavanje 10): kolone
-   donje polovine binarne slike se sabiraju i zaglađuju. Dve linije počinju na paru kolona koji zajedno ima najviše
-   piksela linija, ima vozilo između sebe i udaljen je za širinu trake (2,5-4,3 m, prednost imaju parovi blizu 3,7 m).
-   Uzimanje najvišeg vrha sa svake strane ne radi kada je desna linija isprekidana, a na betonu pored nje postoji
-   pukotina ili mrlja: na `test1.jpg` obe imaju približno isti broj piksela, i tek par na pravoj udaljenosti bira
-   pravu liniju.
-2. **Klizni prozori**: 9 prozora, visine 80 px i širine ±100 px, prati svaku liniju odozdo naviše. Prozor skuplja
-   piksele u sebi, i ako ih ima više od 50, sledeći prozor se centrira na njihov srednji x. U prekidu isprekidane
-   linije prozor nastavlja u pravcu poslednjeg koraka ([src/pipeline.py:157-160](src/pipeline.py#L157-L160)), pa ne gubi
-   isprekidanu liniju u krivini.
-3. **Fit metodom RANSAC** (predavanje 04): model je polinom drugog reda `x = Ay² + By + C`. x je funkcija od y jer
-   su linije skoro vertikalne, a kao funkcija od x ne bi imale jednu vrednost. U svakoj od 250 iteracija (broj iz
-   predavanja 04) bira se po jedan piksel iz svake trećine linije, sortirane po y, i kroz te tri tačke se provlači
-   parabola. Piksel na manje od 30 px od parabole je inlier. Pobeđuje parabola sa najviše inliera, a konačni fit je
-   metoda najmanjih kvadrata (`np.polyfit`) samo na njenim inlierima. Svih 250 parabola se računa odjednom pomoću
-   numpy-ja, pa to košta otprilike koliko i jedan fit najmanjim kvadratima.
+   donje polovine binarne slike se sabiraju i zaglađuju. Početke dve linije tražim kao par kolona koji zajedno ima
+   najviše piksela, između kojih je vozilo i koje su razmaknute za širinu trake (2,5-4,3 m, s prednošću parova blizu
+   3,7 m). Prosto uzimanje najvišeg vrha sa svake strane ne radi kada je desna linija isprekidana, a pored nje na
+   betonu postoji pukotina ili mrlja. Na `test1.jpg` obe imaju približno isti broj piksela i tek uslov o širini trake
+   bira pravu liniju.
+2. **Klizni prozori**: svaku liniju odozdo naviše prati 9 prozora, visine 80 px i širine ±100 px. Ako u prozoru ima
+   više od 50 piksela, sledeći prozor se centrira na njihov srednji x. U prekidu isprekidane linije prozor nastavlja u
+   pravcu poslednjeg pomaka ([src/pipeline.py:157-160](src/pipeline.py#L157-L160)), pa ne gubi liniju u krivini.
+3. **Fit metodom RANSAC** (predavanje 04): model je polinom drugog reda `x = Ay² + By + C`. x je funkcija od y jer su
+   linije skoro vertikalne, pa kao funkcija od x ne bi imale jednu vrednost. U svakoj od 250 iteracija (broj iz
+   predavanja 04) bira se po jedan piksel iz svake trećine linije, sortirane po y, i kroz te tri tačke provlači se
+   parabola. Pikseli bliži od 30 px su inlieri. Pobeđuje parabola sa najviše inliera, a konačni fit se računa metodom
+   najmanjih kvadrata (`np.polyfit`) samo na njenim inlierima. Svih 250 parabola računa se odjednom pomoću numpy-ja, pa
+   je ovo približno brzo kao jedan običan fit.
 4. **Da li je to uopšte linija?** Linija trake je tanka, pa skoro svi pikseli oko nje leže na njoj: na
-   `project_video03.mp4`, `challenge01.mp4` i `challenge02.mp4` najmanje 94 % piksela svake linije su inlieri.
-   Sunčeve mrlje i lišće umesto toga popunjavaju ceo prozor. Ako je inliera manje od 60 %, u tom kadru nema linije
-   (na `challenge03.mp4` takve odbačene „linije“ imaju medijanu od 44 % inliera). Liniji treba i najmanje 300 piksela.
-5. **Sledeći kadar videa** (`around_fit`): prozori širine ±60 px idu odozdo naviše duž prethodnih polinoma. Svaki
-   prozor se pomera u stranu onoliko koliko su se pikseli linije u prozoru ispod udaljili od prethodnog polinoma, pa se
-   prati i linija koja počne da se savija više nego u prethodnom kadru. Fiksni pojas ±60 px oko prethodnog polinoma
-   gubio je takve linije na početku krivine (`challenge03.mp4`, kadrovi 210-240): u pojasu je ostajao samo donji deo
-   linija, a gornji deo fita je nastavljao pravo kroz šum. Posle odbačenog kadra ponovo se koriste klizni prozori.
+   `project_video03.mp4`, `challenge01.mp4` i `challenge02.mp4` inlieri čine najmanje 94 % piksela svake linije.
+   Sunčeve mrlje i lišće, s druge strane, popune ceo prozor. Ako je inliera manje od 60 %, smatram da u tom kadru
+   linije nema (kod tako odbačenih „linija“ na `challenge03.mp4` medijana udela inliera je 44 %). Liniji treba
+   i najmanje 300 piksela.
+5. **Sledeći kadar videa** (`around_fit`): prozori širine ±60 px idu odozdo naviše duž polinoma iz prethodnog kadra.
+   Svaki prozor se pomera u stranu za onoliko koliko su se pikseli u prozoru ispod njega udaljili od prethodnog
+   polinoma, pa se prati i linija koja počne da se savija više nego u prethodnom kadru. Sa fiksnim pojasom od ±60 px
+   takve linije su se gubile na početku krivine (`challenge03.mp4`, kadrovi 210-240): u pojasu bi ostao samo donji
+   deo linije, a gornji deo fita bi nastavio pravo kroz šum. Posle odbačenog kadra pretraga ponovo kreće od kliznih
+   prozora.
 
-Levo su prozori (zeleno) na `test3.jpg`, sa pikselima leve linije u crvenoj, desne u plavoj boji i polinomima u žutoj.
-Desno je pojas pretrage oko prethodnog fita:
+Levo su klizni prozori (zeleno) na `test3.jpg`: pikseli leve linije su crveni, desne plavi, a polinomi žuti. Desno je
+pojas pretrage oko prethodnog fita:
 
 ![Pikseli linija i fit polinomom](docs/fit.jpg)
 
-Zašto RANSAC, a ne samo najmanji kvadrati: na ovom kadru iz `challenge03.mp4` desni prozor je pokupio deo šuma pored
-linije. Najmanji kvadrati savijaju parabolu prema svakom pikselu, dok RANSAC drži krivu na pikselima koji zaista leže
-duž jedne parabole:
+Zašto RANSAC, a ne samo najmanji kvadrati: na ovom kadru iz `challenge03.mp4` desni prozor je pokupio i deo šuma pored
+linije. Najmanji kvadrati vuku parabolu ka svakom pikselu, dok RANSAC drži krivu na pikselima koji zaista leže duž
+jedne parabole:
 
 ![Najmanji kvadrati i RANSAC](docs/ransac.jpg)
 
 #### 5. Opišite kako (i navedite gde u kodu) ste izračunali poluprečnik zakrivljenosti trake i poziciju vozila u odnosu na centar.
 
-Kod je `curvature` ([src/pipeline.py:237-245](src/pipeline.py#L237-L245)) i `curvature_and_offset`
-([src/pipeline.py:248-253](src/pipeline.py#L248-L253)), razmera je u
-[src/pipeline.py:28-29](src/pipeline.py#L28-L29) i `ym_per_px` ([src/pipeline.py:94-96](src/pipeline.py#L94-L96)), a položaj vozila
-u [src/pipeline.py:307](src/pipeline.py#L307).
+Računanje je u funkcijama `curvature` ([src/pipeline.py:237-245](src/pipeline.py#L237-L245)) i
+`curvature_and_offset` ([src/pipeline.py:248-253](src/pipeline.py#L248-L253)). Razmera je zadata u
+[src/pipeline.py:28-29](src/pipeline.py#L28-L29) i u funkciji `ym_per_px`
+([src/pipeline.py:94-96](src/pipeline.py#L94-L96)), a položaj vozila se računa u
+[src/pipeline.py:307](src/pipeline.py#L307).
 
-**Pikseli u metre.**
+**Iz piksela u metre.**
 
-- Poprečno na put: traka je široka 3,7 m (američki standard, 12 stopa) i 640 px na platnu, pa je 1 px = 5,8 mm.
-- Duž puta, razmera sledi iz kalibracije (pinhole model, predavanje 09). Tačka na putu u redu slike y je na
-  udaljenosti `Z = h·fy / (y - y_vp)`, gde je h visina kamere, a `y_vp = 419` red nedogledne tačke. U donjem redu traka
-  je široka 900 px, pa je `900 = 3,7·fx / Z`, odakle je `Z = 4,75 m` i h = 1,24 m. Gornja ivica trapeza je na 13,5 %
-  puta naniže od nedogledne tačke, pa je udaljena `4,75 / 0,135 = 35,2 m`. Platno zato prikazuje **30,5 m** puta, i
-  1 px = 4,2 cm. Trapez je pravougaonik na putu, pa je platno umanjeni pogled odozgo i ova razmera je ista svuda na
-  njemu. Kada se platno u oštroj krivini skrati, `ym_per_px` na isti način daje razmeru za novu gornju ivicu.
-- Nezavisna provera: na platnu se isprekidana linija ponavlja na svakih 338-365 px, što je 14,1-15,2 m. Na
-  autoputevima u Kaliforniji crta je duga 12 stopa, a razmak 36 stopa, što je ukupno 14,6 m.
+- Poprečno na put: traka je široka 3,7 m (američki standard, 12 stopa), a na platnu zauzima 640 px, pa je
+  1 px = 5,8 mm.
+- Duž puta razmera sledi iz kalibracije (pinhole model, predavanje 09). Tačka na putu u redu slike y udaljena je
+  `Z = h·fy / (y - y_vp)`, gde je h visina kamere, a `y_vp = 419` red nedogledne tačke. U donjem redu traka je široka
+  900 px, pa iz `900 = 3,7·fx / Z` dobijam `Z = 4,75 m` i h = 1,24 m. Gornja ivica trapeza je na 13,5 % rastojanja od
+  nedogledne tačke do dna, dakle na `4,75 / 0,135 = 35,2 m`. Platno zato pokriva **30,5 m** puta, i 1 px = 4,2 cm.
+  Pošto je trapez na putu zapravo pravougaonik, platno je umanjen pogled odozgo i ova razmera važi svuda na njemu.
+  Kada se platno u oštroj krivini skrati, `ym_per_px` na isti način računa razmeru za novu gornju ivicu.
+- Nezavisna provera: isprekidana linija se na platnu ponavlja na svakih 338-365 px, odnosno 14,1-15,2 m. Na
+  autoputevima u Kaliforniji crta je duga 12 stopa, a razmak 36 stopa, što ukupno daje 14,6 m.
 
-**Poluprečnik krivine.** Polinom se prevodi u metre sa `A_m = A·xm/ym²` i `B_m = B·xm/ym`. Njegova krivina je
-`κ = 2·A_m / (1 + (2·A_m·y + B_m)²)^1.5`, računa se u donjem redu, kod vozila, a poluprečnik je `R = 1/|κ|`. Računa se za središnju liniju trake
-(srednja vrednost levog i desnog polinoma), što daje jednu vrednost sa manje šuma nego bilo koja od linija.
+**Poluprečnik krivine.** Polinom prevodim u metre sa `A_m = A·xm/ym²` i `B_m = B·xm/ym`. Njegova krivina u donjem
+redu, kod vozila, je `κ = 2·A_m / (1 + (2·A_m·y + B_m)²)^1.5`, a poluprečnik je `R = 1/|κ|`. Računam ga za središnju
+liniju trake (srednju vrednost levog i desnog polinoma), jer tako dobijam jednu vrednost sa manje šuma nego za bilo
+koju liniju posebno.
 
-**Položaj vozila.** Kamera je na sredini vozila, pa je vozilo na sredini donjeg reda slike. Njegov položaj na platnu
-se dobija transformacijom te tačke istom matricom: x = 628, a ne 640, jer trapez nije potpuno simetričan. Pomeraj je
-`(car_x - centar trake na dnu) · xm`, pozitivan udesno.
+**Položaj vozila.** Kamera je na sredini vozila, pa je vozilo na sredini donjeg reda slike. Tu tačku preslikavam
+istom matricom na platno i dobijam x = 628, a ne 640, jer trapez nije savršeno simetričan. Pomeraj je
+`(car_x - centar trake na dnu) · xm`, pozitivan kada je vozilo desno od centra.
 
 Rezultati na test slikama (izlaz komande `python main.py sources/test_images/`):
 
@@ -217,17 +233,18 @@ Rezultati na test slikama (izlaz komande `python main.py sources/test_images/`):
 | straight_lines1.jpg | 17,5 km (pravo) | 0,07 m levo |
 | straight_lines2.jpg | 7,3 km (pravo) | 0,09 m levo |
 
-Kroz ceo `project_video03.mp4` poluprečnik je u krivinama uglavnom 740-1350 m (medijana 1000 m u prvoj krivini, za
-koju Udacity materijal iz kog snimak potiče navodi otprilike 1 km), a na pravom delu između otprilike 12. i 25. sekunde
-prelazi 5 km. Vozilo se kreće 0-0,55 m levo od centra trake:
+Kroz ceo `project_video03.mp4` poluprečnik u krivinama je uglavnom 740-1350 m. U prvoj krivini medijana je 1000 m, a
+Udacity materijal iz kog ovaj snimak potiče za nju navodi otprilike 1 km. Na pravom delu, otprilike od 12. do 25.
+sekunde, poluprečnik prelazi 5 km. Vozilo se sve vreme kreće 0-0,55 m levo od centra trake:
 
 ![Poluprečnik krivine i pomeraj vozila kroz project_video03.mp4](docs/measurements.png)
 
 #### 6. Priložite primer slike sa rezultatom iscrtanim nazad na put, tako da je oblast trake jasno označena.
 
-Kod je `draw_lane` ([src/pipeline.py:256-273](src/pipeline.py#L256-L273)). Na praznom platnu oblast između dva polinoma se
-boji zeleno, a obe linije se crtaju duž polinoma kao debele crvene krive. Platno se inverznom matricom `Minv` vraća
-na kadar i meša sa njim pomoću `cv2.addWeighted`. Poluprečnik i pomeraj se ispisuju u gornjem levom uglu.
+Iscrtavanje radi funkcija `draw_lane` ([src/pipeline.py:256-273](src/pipeline.py#L256-L273)). Na praznom platnu
+oblast između dva polinoma boji se zeleno, a obe linije se crtaju duž polinoma kao debele crvene krive. Platno se
+zatim inverznom matricom `Minv` vraća u perspektivu kamere i meša sa kadrom pomoću `cv2.addWeighted`. Poluprečnik i
+pomeraj ispisuju se u gornjem levom uglu.
 
 ![Rezultati na test slikama](docs/result.jpg)
 
@@ -237,7 +254,7 @@ na kadar i meša sa njim pomoću `cv2.addWeighted`. Poluprečnik i pomeraj se is
 
 **Glavni video: [docs/project_video03.mp4](docs/project_video03.mp4)**
 
-Obrađeno je svih šest snimaka (`python src/make_docs.py`, ili `python main.py <video>` za jedan snimak):
+Obradio sam svih šest snimaka (`python src/make_docs.py`, ili `python main.py <video>` za pojedinačan snimak):
 
 | Video | Kamera | Kadrova | Kadrova sa trakom | Napomena |
 |---|---|---|---|---|
@@ -246,57 +263,58 @@ Obrađeno je svih šest snimaka (`python src/make_docs.py`, ili `python main.py 
 | [project_video03.mp4](docs/project_video03.mp4) | 1280x720 | 1260 | 1260 | nijedan odbačen kadar |
 | [challenge01.mp4](docs/challenge01.mp4) | 1280x720 | 251 | 251 | nijedan odbačen kadar |
 | [challenge02.mp4](docs/challenge02.mp4) | 1280x720 | 484 | 484 | 2 odbačena kadra, zadržana je prethodna traka |
-| [challenge03.mp4](docs/challenge03.mp4) | 1280x720 | 1199 | 1096 (91 %) | nema trake u gustoj izmaglici (kadrovi 876-892, 0,7 s) i u drugoj ukosnici (kadrovi 1023-1108, 3,4 s), videti diskusiju |
+| [challenge03.mp4](docs/challenge03.mp4) | 1280x720 | 1199 | 1096 (91 %) | bez trake u gustoj izmaglici (kadrovi 876-892, 0,7 s) i u drugoj ukosnici (kadrovi 1023-1108, 3,4 s), videti diskusiju |
 
 Na procesoru laptopa glavni video se obrađuje brzinom od oko 34 kadra u sekundi, što je brže od realnog vremena
 (25 kadrova u sekundi).
 
 ![Kadrovi iz project_video03.mp4](docs/video_project.jpg)
 
-Ono što video dodaje pipeline-u za pojedinačne slike je funkcija `update`
-([src/pipeline.py:318-348](src/pipeline.py#L318-L348)) sa proverama u `plausible`
-([src/pipeline.py:350-360](src/pipeline.py#L350-L360)), i prilagođavanje platna u
+U odnosu na obradu pojedinačne slike, video koristi i informaciju iz prethodnih kadrova. To je u funkciji `update`
+([src/pipeline.py:318-348](src/pipeline.py#L318-L348)), sa proverama u `plausible`
+([src/pipeline.py:350-360](src/pipeline.py#L350-L360)), i u prilagođavanju platna u
 [src/pipeline.py:298-304](src/pipeline.py#L298-L304). Parametri su u [src/pipeline.py:51-61](src/pipeline.py#L51-L61).
 
-1. **Praćenje**: pikseli linija se traže oko prethodnih polinoma (tačka 4 iznad).
-2. **Provera ispravnosti**: novi par linija se prihvata samo ako liči na traku:
-   - traka kod vozila je široka 2,5-4,3 m (na pet snimaka koji rade u potpunosti izmerena širina je najviše
+1. **Praćenje**: pikseli linija traže se oko polinoma iz prethodnog kadra (tačka 5 u delu o pikselima linija).
+2. **Provera ispravnosti**: novi par linija prihvata se samo ako liči na traku:
+   - traka je kod vozila široka 2,5-4,3 m (na pet snimaka koji rade bez greške izmerena širina nikad ne prelazi
      4,12 m),
-   - širina, merena poprečno na traku, menja se duž platna za manje od 2,5 m,
-   - širina kod vozila se u odnosu na prethodni kadar menja za manje od 0,5 m,
+   - širina, merena poprečno na traku, ne menja se duž platna za više od 2,5 m,
+   - širina kod vozila se u odnosu na prethodni kadar ne menja za više od 0,5 m,
    - vozilo je u traci (pomeraj manji od 1,2 m),
-   - obe linije se savijaju slično: njihove krivine `κ` (formula u tački 5 iznad) razlikuju se za manje od
-     0,01 1/m. Ovde je bitna cela formula. Poređenje samo koeficijenta `A` bilo bi pogrešno u oštrim krivinama, gde
-     linije idu dijagonalno preko platna: tamo dve paralelne linije imaju različito `A`, pa su dobri parovi bili
-     odbijani.
+   - obe linije se savijaju slično: njihove krivine `κ` (formula u tački 5 iznad) razlikuju se za manje od 0,01 1/m.
+     Ovde je bitno uzeti celu formulu. Poređenje samo koeficijenta `A` ne valja u oštrim krivinama, gde linije idu
+     dijagonalno preko platna: tamo dve paralelne linije imaju različito `A`, pa bi i dobri parovi bili odbijeni.
 
-   Odbačen kadar zadržava prethodnu traku, a sledeći kadar ponovo koristi klizne prozore. Posle 10 odbačenih kadrova
-   zaredom traka se odbacuje.
-3. **Jedna dobra linija** ([src/pipeline.py:324-329](src/pipeline.py#L324-L329)): ako par ne prođe proveru ili jedna linija
-   nedostaje (prekid isprekidane linije, izbledela boja, vozilo preko linije), zadržava se linija sa više piksela, a
-   druga se crta paralelno sa njom, na poslednjoj poznatoj širini trake. „Paralelno“ se meri duž normale na krivu
-   (`parallel`, [src/pipeline.py:217-222](src/pipeline.py#L217-L222)), a ne prostim pomeranjem u stranu, što je bitno u
-   oštrim krivinama.
-4. **Usrednjavanje**: eksponencijalni pokretni prosek koeficijenata polinoma, sa težinom 0,25 za novi kadar. Uklanja
-   treperenje između kadrova i jednostavniji je srodnik Kalmanovog filtera iz predavanja 07.
-5. **Nagib kamere** ([src/pipeline.py:340-343](src/pipeline.py#L340-L343)): na tačnom pogledu odozgo linije trake su
-   paralelne. Ako se skupljaju (gore su uže nego kod vozila), nedogledna tačka je niže nego što je pretpostavljeno, pa
-   se u svakom kadru pomera 0,5 px naniže po metru razlike, a obrnuto ako se šire. To se radi samo na blagim
-   krivinama (poluprečnik veći od 500 m), gde parabola dobro opisuje linije, a nedogledna tačka ostaje u granicama
-   ±30 px od izmerene. Na `project_video03.mp4` ostaje u redovima 415-424 (izmereno je 419). Na `challenge02.mp4` se
-   za oko 7 s pomeri sa 419 na 435-443, što se slaže sa nedoglednom tačkom koja se vidi na njegovim kadrovima (oko
-   445). Posle toga se širina trake duž njegovog platna menja za medijanu od samo 0,15 m. Bez ovog koraka linije se
-   tamo skupljaju (medijana promene 1,35 m), platno nije pravi pogled odozgo i poluprečnik je potcenjen (medijana
-   647 m umesto 1068 m).
-6. **Domet pogleda koji se prilagođava krivini** ([src/pipeline.py:298-304](src/pipeline.py#L298-L304), `look_ahead`
-   [src/pipeline.py:89-91](src/pipeline.py#L89-L91)): u ukosnici linije izlaze iz platna od 30 m kroz njegove stranice. Zato
-   gornja ivica trapeza zavisi od poluprečnika iz prethodnog kadra: 30 m puta za poluprečnike iznad 300 m, sve manje,
-   do oko 11 m pri poluprečniku od 30 m. Menja se polako (najviše 0,005 po kadru), a prethodni polinomi se prenose na
-   novo platno preko homografije `M_novo · Minv_staro` (`remap`, [src/pipeline.py:209-214](src/pipeline.py#L209-L214)), pa
-   se praćenje nastavlja bez skoka. Na prvih pet snimaka platno uvek ostaje na 30,5 m, pa tu ovo ništa ne menja. Na
-   `challenge03.mp4` je kraće na 900 od 1199 kadrova, do najmanje 11,1 m.
+   Ako kadar ne prođe proveru, zadržava se prethodna traka, a u sledećem kadru pretraga kreće od kliznih prozora.
+   Posle 10 odbačenih kadrova zaredom traka se više ne prikazuje.
+3. **Jedna dobra linija** ([src/pipeline.py:324-329](src/pipeline.py#L324-L329)): ako par ne prođe proveru ili jedna
+   linija nedostaje (prekid isprekidane linije, izbledela boja, vozilo preko linije), zadržava se linija sa više
+   piksela, a druga se crta paralelno sa njom, na poslednjoj poznatoj širini trake. Paralelnost se meri duž normale na
+   krivu (`parallel`, [src/pipeline.py:217-222](src/pipeline.py#L217-L222)), a ne prostim pomeranjem u stranu, što je
+   bitno u oštrim krivinama.
+4. **Usrednjavanje**: koeficijenti polinoma se usrednjavaju eksponencijalnim pokretnim prosekom, sa težinom 0,25 za
+   novi kadar. To uklanja treperenje između kadrova i predstavlja jednostavniju varijantu Kalmanovog filtera iz
+   predavanja 07.
+5. **Nagib kamere** ([src/pipeline.py:340-343](src/pipeline.py#L340-L343)): u ispravnom pogledu odozgo linije trake
+   su paralelne. Ako se ka vrhu skupljaju, nedogledna tačka je niže nego što je pretpostavljeno, pa se u svakom kadru
+   pomera naniže za 0,5 px po metru razlike u širini, a ako se šire, pomera se naviše. To radim samo na blagim
+   krivinama (poluprečnik veći od 500 m), gde parabola dobro opisuje linije, a nedogledna tačka ne sme da se udalji
+   više od ±30 px od izmerene. Na `project_video03.mp4` ostaje u redovima 415-424 (izmereno je 419). Na
+   `challenge02.mp4` se za oko 7 s pomeri sa 419 na 435-443, što odgovara nedoglednoj tački koja se vidi na njegovim
+   kadrovima (oko 445). Posle toga se širina trake duž platna menja za samo 0,15 m (medijana). Bez ovog koraka linije
+   se tamo skupljaju (medijana promene 1,35 m), platno nije pravi pogled odozgo, a poluprečnik ispada potcenjen
+   (medijana 647 m umesto 1068 m).
+6. **Domet pogleda prema krivini** ([src/pipeline.py:298-304](src/pipeline.py#L298-L304), `look_ahead`
+   [src/pipeline.py:89-91](src/pipeline.py#L89-L91)): u ukosnici linije izlaze iz platna od 30 m kroz njegove
+   stranice. Zato gornja ivica trapeza zavisi od poluprečnika iz prethodnog kadra: platno pokriva 30 m puta za
+   poluprečnike iznad 300 m, a sve manje kako se krivina oštri, do oko 11 m pri poluprečniku od 30 m. Domet se menja
+   polako (najviše 0,005 po kadru), a prethodni polinomi se na novo platno prenose homografijom `M_novo · Minv_staro`
+   (`remap`, [src/pipeline.py:209-214](src/pipeline.py#L209-L214)), pa se praćenje nastavlja bez skoka. Na prvih pet
+   snimaka platno sve vreme ostaje na 30,5 m, pa tamo ovo ništa ne menja. Na `challenge03.mp4` platno je kraće na 900
+   od 1199 kadrova, a najkraće je 11,1 m.
 
-Kadrovi iz ostalih snimaka. Poslednji kadar prikazuje grešku na `challenge03.mp4` u drugoj ukosnici:
+Kadrovi iz ostalih snimaka. Poslednji kadar pokazuje grešku na `challenge03.mp4` u drugoj ukosnici:
 
 ![Kadrovi iz ostalih snimaka](docs/video_other.jpg)
 
@@ -304,64 +322,65 @@ Kadrovi iz ostalih snimaka. Poslednji kadar prikazuje grešku na `challenge03.mp
 
 #### 1. Ukratko prodiskutujte probleme / poteškoće sa kojima ste se suočili tokom implementacije ovog projekta. Gde će vaš pipeline verovatno otkazati? Šta biste mogli da uradite da ga učinite robusnijim?
 
-**Problemi i kako sam ih rešio**
+**Problemi na koje sam naišao i kako sam ih rešio**
 
-1. **Gradijenti su nalazili previše.** Prva verzija je kombinovala Sobel x, pravac gradijenta i pragove u HLS
-   prostoru. Radila je na projektnom videu, ali je na `challenge02.mp4` Sobel nalazio i spojeve od katrana, ivicu
-   između dve vrste asfalta i senku ograde, jer su sve to jake vertikalne ivice. Linija trake nije samo ivica, nego
-   uska svetla traka, a to je upravo ono što nalazi morfološki top-hat:
+1. **Gradijenti su hvatali previše.** Prva verzija je kombinovala Sobel x, pravac gradijenta i pragove u HLS prostoru.
+   Na projektnom videu je radila, ali je na `challenge02.mp4` Sobel hvatao i spojeve od katrana, ivicu između dve vrste
+   asfalta i senku ograde, jer su to sve jake vertikalne ivice. Linija trake, međutim, nije samo ivica nego uska svetla
+   traka, a upravo to izdvaja morfološki top-hat:
 
    ![Sobel x u poređenju sa top-hat-om](docs/sobel_vs_tophat.jpg)
 
-2. **Ručno izabran trapez i pretpostavljena razmera.** Umesto četiri pretpostavljene tačke izmerio sam nedoglednu
-   tačku, a metri po pikselu duž puta slede iz kalibracije umesto iz pretpostavke. Isprekidana linija potvrđuje
-   rezultat.
-3. **Nagib kamere nije stalan.** Sa fiksnim trapezom linije na `challenge02.mp4` su se na platnu skupljale. Moja prva
-   provera ispravnosti je zahtevala paralelne linije i odbacila je 391 od 484 kadra. Procena nedogledne tačke tokom
-   praćenja (video, tačka 5) je to rešila.
-4. **Planinski put** (`challenge03.mp4`). Prva verzija je iscrtavala traku na samo 79 % kadrova, i deo njih je bio
-   pogrešan. Za svaki kadar sam merio koja provera pada i zašto, i dodavao izmene jednu po jednu, svaku proveravajući
-   na svih šest snimaka da ostali ne bi postali gori: RANSAC sa udelom inliera, pretraga para za početke linija, domet
-   pogleda koji se prilagođava krivini, dodatne provere ispravnosti i paralelna linija merena duž normale. Zatim sam
-   pregledao svaki 10. kadar sva tri challenge snimka i našao tri preostale greške:
+2. **Ručno biran trapez i pretpostavljena razmera.** Umesto da pogađam četiri tačke, izmerio sam nedoglednu tačku, a
+   razmeru duž puta sam izveo iz kalibracije umesto da je pretpostavim. Isprekidana linija potvrđuje dobijeni rezultat.
+3. **Nagib kamere nije stalan.** Sa fiksnim trapezom linije na `challenge02.mp4` su se na platnu skupljale ka vrhu, pa
+   je moja prva provera, koja je tražila paralelne linije, odbacivala 391 od 484 kadra. Problem je rešila procena
+   nedogledne tačke tokom praćenja (deo o videu, tačka 5).
+4. **Planinski put** (`challenge03.mp4`). Prva verzija je crtala traku na samo 79 % kadrova, i to ne uvek tačno. Za
+   svaki kadar sam beležio koja provera pada i zašto, pa sam izmene uvodio jednu po jednu i posle svake proveravao svih
+   šest snimaka, da se ostali ne bi pokvarili. Tako su nastali RANSAC sa udelom inliera, traženje početaka linija u
+   paru, domet pogleda koji prati krivinu, dodatne provere ispravnosti i paralelna linija merena duž normale. Na kraju
+   sam pregledao svaki deseti kadar sva tri challenge snimka i našao još tri greške:
    - na početku krivine (kadrovi 210-240 i 280-290) desna linija je bila iscrtana na travi pored puta, jer je fiksni
-     pojas pretrage gubio liniju koja se savija. Ispravljeno prozorima duž prethodnog fita (tačka 5 pretrage linija);
+     pojas pretrage gubio liniju koja počinje da se savija. Rešenje su prozori duž prethodnog fita (tačka 5 u delu o
+     pikselima linija);
    - u gustoj izmaglici (kadrovi 880-905) ivica ograde je uzimana za desnu liniju, pa je traka klizila sa puta. Sa
-     novim praćenjem to se više ne dešava: ti kadrovi nemaju traku umesto pogrešne;
+     novim praćenjem toga više nema: ti kadrovi ostaju bez trake umesto da dobiju pogrešnu;
    - u ukosnicama su dobri parovi bili odbijani, jer je provera poredila samo koeficijent `A` umesto prave krivine
-     (video, tačka 2).
+     (deo o videu, tačka 2).
 
-   Sada je traka iscrtana na 91 % kadrova. Kao meru pogrešnih traka brojao sam kadrove van druge ukosnice u kojima bi
-   vozilo bilo više od 0,8 m od centra trake: bilo ih je 11, a sada ih nema. Bez RANSAC-a (sa običnim najmanjim
-   kvadratima) bilo bi ih 16, a sa fiksnim platnom od 30 m ne bi ih bilo, ali bi traka bila iscrtana na manje kadrova
-   (1058 umesto 1096). U ukosnici je takav pomeraj stvaran: vozač seče krivinu blizu središnje linije.
-5. **Dve različite kamere.** Za snimke 960x540 nema slika šahovske table, pa se kod njih ne radi korekcija distorzije
-   i imaju svoj trapez. Njihovi metri su samo približni, jer visina i žižna daljina te kamere nisu poznate, pa je
-   pretpostavljena ista razmera.
-6. **Ponovljivi rezultati.** RANSAC bira slučajne uzorke. Svaki detektor ima svoj generator slučajnih brojeva sa
-   fiksnim početnim stanjem (seed), pa ista slika ili isti video uvek daju potpuno isti rezultat.
+   Sada se traka crta na 91 % kadrova. Kao meru pogrešnih traka brojao sam kadrove van druge ukosnice u kojima bi
+   vozilo bilo više od 0,8 m od centra trake. Takvih je ranije bilo 11, a sada ih nema. Bez RANSAC-a (sa običnim
+   najmanjim kvadratima) bilo bi ih 16. Sa fiksnim platnom od 30 m ih takođe ne bi bilo, ali bi traka bila iscrtana na
+   manje kadrova (1058 umesto 1096). U samoj ukosnici ovakav pomeraj je stvaran, jer vozač seče krivinu uz središnju
+   liniju.
+5. **Dve različite kamere.** Za snimke 960x540 nema slika šahovske table, pa se na njima ne radi korekcija distorzije,
+   a imaju i svoj trapez. Metri su kod njih samo približni, jer visina i žižna daljina te kamere nisu poznate, pa sam
+   pretpostavio istu razmeru.
+6. **Ponovljivost rezultata.** RANSAC bira slučajne uzorke, pa svaki detektor ima svoj generator slučajnih brojeva sa
+   fiksnim početnim stanjem (seed). Zato ista slika ili isti video uvek daju potpuno isti rezultat.
 
 **Gde pipeline otkazuje**
 
 - **Druga ukosnica na `challenge03.mp4`** (kadrovi 1023-1108). Put skreće za skoro 180°, pa je traka ispred vozila
-  van slike, a kamera vidi uglavnom suprotnu traku i ogradu. Jako sunce i zamućena slika brišu belu liniju, a tamo gde
-  su obe linije nađene, one izlaze iz platna kroz njegovu stranu: parabola `x = f(y)` ne može da prati put koji skreće
-  u stranu, pa se dve krive van vidljivog dela razilaze. Provere odbacuju ove kadrove, pa se umesto pogrešne trake ne
-  crta nikakva.
-- **Gusta izmaglica** (kadrovi 876-892 na `challenge03.mp4`): žuta linija skoro nestaje, pa nema dovoljno piksela
+  van slike, a kamera vidi uglavnom suprotnu traku i ogradu. Jako sunce i zamućena slika brišu belu liniju. Tamo gde
+  se obe linije ipak nađu, one izlaze iz platna kroz bočnu stranu: parabola `x = f(y)` ne može da prati put koji
+  skreće u stranu, pa se dve krive van vidljivog dela razilaze. Provere ove kadrove odbacuju, pa se umesto pogrešne
+  trake ne crta ništa.
+- **Gusta izmaglica** (kadrovi 876-892 na `challenge03.mp4`): žuta linija gotovo nestaje, pa nema dovoljno piksela
   linije, a jedina svetla traka desno je ivica ograde.
-- **Promena trake**: praćenje prati stare linije dok ih provera ispravnosti ne odbaci.
-- **Noć, kiša, sneg, izbledela boja**, i svetli uski objekti tik uz liniju.
-- **Usponi i padovi**: pogled odozgo pretpostavlja ravan put. Procena nagiba to nadoknađuje samo delimično.
+- **Promena trake**: praćenje se drži starih linija sve dok ih provera ispravnosti ne odbaci.
+- **Noć, kiša, sneg i izbledela boja**, kao i svetli uski objekti tik uz liniju.
+- **Usponi i padovi**: pogled odozgo pretpostavlja ravan put, a procena nagiba to nadoknađuje samo delimično.
 
-**Kako ga učiniti robusnijim**
+**Kako bi se mogao poboljšati**
 
-- **Kalmanov filter** umesto pokretnog proseka (predavanje 07). Modeluje koliko brzo se traka menja i govori koliko je
-  procena pouzdana, pa bi provere mogle da zavise od te pouzdanosti.
-- **Bogatiji model trake**: parabola ne može da opiše S-krivinu ili ukosnicu. Splajn, klotoida ili 3D model puta
-  pratili bi takve puteve.
-- **Automatska početna nedogledna tačka** za nepoznatu kameru, iz Hafove transformacije linija trake na prvim
-  kadrovima (predavanje 04).
-- **Korišćenje i ostalih linija** (suprotna traka, ivica puta): kada jedna linija moje trake nije vidljiva, njihova
-  udaljenost bi i dalje govorila gde je.
+- **Kalmanov filter** umesto pokretnog proseka (predavanje 07). On modeluje koliko brzo se traka menja i daje meru
+  pouzdanosti procene, pa bi provere mogle da zavise od nje.
+- **Bogatiji model trake**: parabola ne može da opiše S-krivinu ili ukosnicu. Splajn, klotoida ili 3D model puta bi
+  mogli da prate i takve puteve.
+- **Automatsko određivanje nedogledne tačke** za nepoznatu kameru, pomoću Hafove transformacije linija trake na
+  prvim kadrovima (predavanje 04).
+- **Korišćenje ostalih linija** (suprotne trake, ivice puta): kada jedna linija moje trake nije vidljiva, njihovo
+  rastojanje bi i dalje pokazivalo gde se nalazi.
 - **Upozorenje o napuštanju trake** na osnovu izmerenog pomeraja (predavanje 10).
