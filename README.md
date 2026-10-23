@@ -303,3 +303,65 @@ Kadrovi iz ostalih snimaka. Poslednji kadar prikazuje grešku na `challenge03.mp
 ### Diskusija
 
 #### 1. Ukratko prodiskutujte probleme / poteškoće sa kojima ste se suočili tokom implementacije ovog projekta. Gde će vaš pipeline verovatno otkazati? Šta biste mogli da uradite da ga učinite robusnijim?
+
+**Problemi i kako sam ih rešio**
+
+1. **Gradijenti su nalazili previše.** Prva verzija je kombinovala Sobel x, pravac gradijenta i pragove u HLS
+   prostoru. Radila je na projektnom videu, ali je na `challenge02.mp4` Sobel nalazio i spojeve od katrana, ivicu
+   između dve vrste asfalta i senku ograde, jer su sve to jake vertikalne ivice. Linija trake nije samo ivica, nego
+   uska svetla traka, a to je upravo ono što nalazi morfološki top-hat:
+
+   ![Sobel x u poređenju sa top-hat-om](docs/sobel_vs_tophat.jpg)
+
+2. **Ručno izabran trapez i pretpostavljena razmera.** Umesto četiri pretpostavljene tačke izmerio sam nedoglednu
+   tačku, a metri po pikselu duž puta slede iz kalibracije umesto iz pretpostavke. Isprekidana linija potvrđuje
+   rezultat.
+3. **Nagib kamere nije stalan.** Sa fiksnim trapezom linije na `challenge02.mp4` su se na platnu skupljale. Moja prva
+   provera ispravnosti je zahtevala paralelne linije i odbacila je 391 od 484 kadra. Procena nedogledne tačke tokom
+   praćenja (video, tačka 5) je to rešila.
+4. **Planinski put** (`challenge03.mp4`). Prva verzija je iscrtavala traku na samo 79 % kadrova, i deo njih je bio
+   pogrešan. Za svaki kadar sam merio koja provera pada i zašto, i dodavao izmene jednu po jednu, svaku proveravajući
+   na svih šest snimaka da ostali ne bi postali gori: RANSAC sa udelom inliera, pretraga para za početke linija, domet
+   pogleda koji se prilagođava krivini, dodatne provere ispravnosti i paralelna linija merena duž normale. Zatim sam
+   pregledao svaki 10. kadar sva tri challenge snimka i našao tri preostale greške:
+   - na početku krivine (kadrovi 210-240 i 280-290) desna linija je bila iscrtana na travi pored puta, jer je fiksni
+     pojas pretrage gubio liniju koja se savija. Ispravljeno prozorima duž prethodnog fita (tačka 5 pretrage linija);
+   - u gustoj izmaglici (kadrovi 880-905) ivica ograde je uzimana za desnu liniju, pa je traka klizila sa puta. Sa
+     novim praćenjem to se više ne dešava: ti kadrovi nemaju traku umesto pogrešne;
+   - u ukosnicama su dobri parovi bili odbijani, jer je provera poredila samo koeficijent `A` umesto prave krivine
+     (video, tačka 2).
+
+   Sada je traka iscrtana na 91 % kadrova. Kao meru pogrešnih traka brojao sam kadrove van druge ukosnice u kojima bi
+   vozilo bilo više od 0,8 m od centra trake: bilo ih je 11, a sada ih nema. Bez RANSAC-a (sa običnim najmanjim
+   kvadratima) bilo bi ih 16, a sa fiksnim platnom od 30 m ne bi ih bilo, ali bi traka bila iscrtana na manje kadrova
+   (1058 umesto 1096). U ukosnici je takav pomeraj stvaran: vozač seče krivinu blizu središnje linije.
+5. **Dve različite kamere.** Za snimke 960x540 nema slika šahovske table, pa se kod njih ne radi korekcija distorzije
+   i imaju svoj trapez. Njihovi metri su samo približni, jer visina i žižna daljina te kamere nisu poznate, pa je
+   pretpostavljena ista razmera.
+6. **Ponovljivi rezultati.** RANSAC bira slučajne uzorke. Svaki detektor ima svoj generator slučajnih brojeva sa
+   fiksnim početnim stanjem (seed), pa ista slika ili isti video uvek daju potpuno isti rezultat.
+
+**Gde pipeline otkazuje**
+
+- **Druga ukosnica na `challenge03.mp4`** (kadrovi 1023-1108). Put skreće za skoro 180°, pa je traka ispred vozila
+  van slike, a kamera vidi uglavnom suprotnu traku i ogradu. Jako sunce i zamućena slika brišu belu liniju, a tamo gde
+  su obe linije nađene, one izlaze iz platna kroz njegovu stranu: parabola `x = f(y)` ne može da prati put koji skreće
+  u stranu, pa se dve krive van vidljivog dela razilaze. Provere odbacuju ove kadrove, pa se umesto pogrešne trake ne
+  crta nikakva.
+- **Gusta izmaglica** (kadrovi 876-892 na `challenge03.mp4`): žuta linija skoro nestaje, pa nema dovoljno piksela
+  linije, a jedina svetla traka desno je ivica ograde.
+- **Promena trake**: praćenje prati stare linije dok ih provera ispravnosti ne odbaci.
+- **Noć, kiša, sneg, izbledela boja**, i svetli uski objekti tik uz liniju.
+- **Usponi i padovi**: pogled odozgo pretpostavlja ravan put. Procena nagiba to nadoknađuje samo delimično.
+
+**Kako ga učiniti robusnijim**
+
+- **Kalmanov filter** umesto pokretnog proseka (predavanje 07). Modeluje koliko brzo se traka menja i govori koliko je
+  procena pouzdana, pa bi provere mogle da zavise od te pouzdanosti.
+- **Bogatiji model trake**: parabola ne može da opiše S-krivinu ili ukosnicu. Splajn, klotoida ili 3D model puta
+  pratili bi takve puteve.
+- **Automatska početna nedogledna tačka** za nepoznatu kameru, iz Hafove transformacije linija trake na prvim
+  kadrovima (predavanje 04).
+- **Korišćenje i ostalih linija** (suprotna traka, ivica puta): kada jedna linija moje trake nije vidljiva, njihova
+  udaljenost bi i dalje govorila gde je.
+- **Upozorenje o napuštanju trake** na osnovu izmerenog pomeraja (predavanje 10).
