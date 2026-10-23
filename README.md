@@ -10,6 +10,7 @@ primerom rezultata. Sve slike su u [docs/](docs/).
 - [src/pipeline.py](src/pipeline.py) je pipeline: svaki kadar prolazi kroz isti niz filtera, a klasa `LaneDetector`
   ih poziva redom.
 - [main.py](main.py) prima sliku, folder sa slikama ili video i čuva rezultat.
+- [src/make_docs.py](src/make_docs.py) ponovo pravi sve slike i video snimke u `docs/` koje koristi ovaj izveštaj.
 
 ```bash
 python3 -m venv .venv
@@ -19,6 +20,7 @@ pip install -r requirements.txt
 python main.py sources/test_images/test1.jpg           # -> output_images/test1.jpg
 python main.py sources/test_images/                    # sve slike u folderu
 python main.py sources/test_videos/project_video03.mp4 # -> output_videos/project_video03.mp4
+python src/make_docs.py                                # ponovo pravi sve slike i video snimke u docs/
 ```
 
 Jedna razlika u odnosu na redosled iz šablona: perspektivna transformacija se radi **pre** pragovanja. Razlog je
@@ -235,7 +237,7 @@ na kadar i meša sa njim pomoću `cv2.addWeighted`. Poluprečnik i pomeraj se is
 
 **Glavni video: [docs/project_video03.mp4](docs/project_video03.mp4)**
 
-Obrađeno je svih šest snimaka (`python main.py sources/test_videos/`, ili `python main.py <video>` za jedan snimak):
+Obrađeno je svih šest snimaka (`python src/make_docs.py`, ili `python main.py <video>` za jedan snimak):
 
 | Video | Kamera | Kadrova | Kadrova sa trakom | Napomena |
 |---|---|---|---|---|
