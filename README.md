@@ -30,8 +30,6 @@ Ciljevi / koraci ovog projekta su sledeći:
 
 ### Izveštaj / README
 
-#### 1. Priložite izveštaj koji obuhvata sve tačke kriterijuma ocenjivanja i način na koji ste odgovorili na svaku od njih.
-
 Slike u ovom izveštaju i obrađeni video snimci nalaze se u folderu `docs/`. Ceo pipeline je u `src/pipeline.py`, gde
 klasa `LaneDetector` redom poziva sve korake nad jednim kadrom. `main.py` prima sliku, folder sa slikama ili video i
 čuva rezultat u `output_images/` ili `output_videos/`, a `src/make_docs.py` ponovo pravi sve slike i snimke iz `docs/`.
@@ -52,7 +50,7 @@ je objašnjen u tački 2.
 
 ### Kalibracija kamere
 
-#### 1. Ukratko opišite kako ste izračunali matricu kamere i koeficijente distorzije. Priložite primer kalibracione slike sa ispravljenom distorzijom.
+#### Matrica kamere i koeficijenti distorzije
 
 Kalibracija je u funkciji `calibrate()`. Na svakoj slici šahovske table `cv2.findChessboardCorners()` traži 9x6
 unutrašnjih uglova, a `cv2.cornerSubPix()` ih zatim precizira na nivo ispod piksela. Svaka uspešna detekcija daje dve
@@ -73,7 +71,7 @@ postaju prave.
 
 ### Pipeline (pojedinačne slike)
 
-#### 1. Priložite primer slike sa ispravljenom distorzijom.
+#### 1. Korekcija distorzije
 
 Korekcija distorzije je prvi korak za svaki kadar. Na slici puta efekat je slabo vidljiv i najviše se primećuje na
 ivicama: hauba na dnu i belo vozilo desno pomeraju se ka spolja.
@@ -83,7 +81,7 @@ sa druge kamere, za koju nema slika table, pa se ti kadrovi obrađuju bez korekc
 
 ![Slika puta bez distorzije][image2]
 
-#### 2. Opišite kako (i navedite gde u kodu) ste koristili transformacije boja, gradijente ili druge metode za kreiranje binarne slike dobijene pragovanjem. Priložite primer dobijene binarne slike.
+#### 2. Binarna slika
 
 Binarna slika se pravi u funkciji `binarize()`, i to na pogledu odozgo, a ne na originalnoj slici. U pogledu odozgo
 linija trake ima istu širinu na celoj slici, 10-15 cm, odnosno oko 20 px, pa se veličina filtera može zadati u
@@ -110,7 +108,7 @@ Kolone prikazuju pogled odozgo, odziv top-hat filtera na kanalima L i b i konač
 
 ![Binarna slika][image3]
 
-#### 3. Opišite kako (i navedite gde u kodu) ste izvršili perspektivnu transformaciju i priložite primer transformisane slike.
+#### 3. Perspektivna transformacija
 
 Matrice prave funkcija `perspective()`: `M` iz pogleda kamere u pogled odozgo i inverznu `Minv` za vraćanje
 rezultata nazad (tačka 6), obe pomoću `cv2.getPerspectiveTransform()`. Sama slika se preslikava sa
@@ -139,7 +137,7 @@ kamere.
 Transformacija pretpostavlja ravan put i stalan nagib kamere. Kako se u videu to menja, nedogledna tačka se procenjuje
 tokom vožnje, a u oštrim krivinama platno se skraćuje (opisano u delu o videu).
 
-#### 4. Opišite kako (i navedite gde u kodu) ste identifikovali piksele linija trake i fitovali njihove pozicije polinomom.
+#### 4. Pikseli linija i fit polinomom
 
 Ulaz je binarna slika pogleda odozgo iz tačke 2.
 
@@ -177,7 +175,7 @@ prozora uzima piksele u pojasu od ±60 px oko fita iz prethodnog kadra (desni de
 odozdo naviše u prozorima, a svaki prozor se pomera u stranu onoliko koliko su se pikseli ispod njega udaljili od
 prethodnog fita. Tako se ne gubi linija koja na početku krivine počne da se savija više nego u prethodnom kadru.
 
-#### 5. Opišite kako (i navedite gde u kodu) ste izračunali poluprečnik zakrivljenosti trake i poziciju vozila u odnosu na centar.
+#### 5. Poluprečnik krivine i pozicija vozila
 
 Računanje je u funkcijama `curvature()` i `curvature_and_offset()`.
 
@@ -218,7 +216,7 @@ Udacity materijal, iz kog snimak potiče, navodi otprilike 1 km, a ovde je medij
 
 ![Krivina i pomeraj kroz video][image6]
 
-#### 6. Priložite primer slike sa rezultatom iscrtanim nazad na put, tako da je oblast trake jasno označena.
+#### 6. Traka iscrtana nazad na put
 
 Iscrtavanje radi `draw_lane()`. Traka se crta u pogledu odozgo, gde su fitovi i definisani: oblast između dva polinoma
 boji se zeleno, a obe linije se crtaju duž polinoma kao debele crvene krive. `cv2.warpPerspective()` sa inverznom
@@ -229,7 +227,7 @@ upisuju poluprečnik krivine i pomeraj vozila.
 
 ### Pipeline (video)
 
-#### 1. Priložite link ka svom finalnom izlaznom videu. Vaš pipeline treba da radi prihvatljivo dobro na celom projektnom videu (blago treperenje linija je u redu, ali bez katastrofalnih grešaka koje bi dovele do toga da automobil sleti sa puta!).
+#### Izlazni video
 
 Izlazni video projektnog snimka nalazi se [ovde](./docs/project_video03.mp4). U `docs/` su i obrađeni ostali snimci:
 
@@ -276,8 +274,6 @@ Kadrovi iz ostalih snimaka. Poslednji kadar je iz druge ukosnice na `challenge03
 ![Kadrovi iz ostalih snimaka][image9]
 
 ### Diskusija
-
-#### 1. Ukratko prodiskutujte probleme / poteškoće sa kojima ste se suočili tokom implementacije ovog projekta. Gde će vaš pipeline verovatno otkazati? Šta biste mogli da uradite da ga učinite robusnijim?
 
 **Ivice koje liče na linije.** Prva verzija je pravila binarnu sliku od Sobel gradijenta i pragova u HLS prostoru. Na
 projektnom videu je radila, ali je na `challenge02` gradijent hvatao spoj dve vrste asfalta, spojeve od katrana i oštru
