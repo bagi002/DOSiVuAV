@@ -1,5 +1,3 @@
-# Detekcija saobraćajnih traka (DOSiVuAV)
-
 ### Izveštaj / README
 
 #### 1. Priložite izveštaj koji obuhvata sve tačke kriterijuma ocenjivanja i način na koji ste odgovorili na svaku od njih.
@@ -84,9 +82,12 @@ slike.
 Koraci:
 
 1. **Gausov filter 5x5** uklanja šum (predavanje 02).
-2. **Prelazak iz BGR u LAB.** L je svetlina, a b plavo-žuta osa, na kojoj se žuta boja izdvaja i na suncu i u senci
-   (prostori boja i filtriranje po boji, predavanja 00 i 06).
-3. **Morfološki top-hat** (morfološko filtriranje, predavanje 06): `tophat = I - opening(I)`. Otvaranje (opening)
+2. **Prelazak iz BGR u LAB.** L je svetlina, a b plavo-žuta osa, na kojoj se žuta boja izdvaja i na suncu i u senci.
+   Prostori boja i filtriranje po boji obrađeni su u predavanjima 00 i 06, gde je za izdvajanje boje korišćen HSV.
+   Ja sam izabrao LAB, jer kanal b direktno meri koliko je piksel žut, pa je za žutu boju dovoljan jedan prag, nezavisno
+   od svetline.
+3. **Morfološki top-hat**: `tophat = I - opening(I)`. Morfološko filtriranje se u predavanju 06 koristi za
+   uklanjanje sitnih izolovanih piksela, a top-hat je operacija izvedena iz istog otvaranja. Otvaranje (opening)
    horizontalnim kernelom 1x61 (35 cm) briše svaku svetlu strukturu užu od 35 cm, pa razlika zadržava upravo njih, a to
    je boja na kolovozu. Široke svetle površine (svetao beton, belo vozilo) i tamne strukture (spojevi od katrana,
    senke, ivica između dve vrste asfalta) ne daju odziv. Pošto se odziv meri u odnosu na okolinu, isti prag radi i na
@@ -168,7 +169,8 @@ Za ovaj deo zadužene su funkcije `lane_starts` ([src/pipeline.py:123-137](src/p
    najmanjih kvadrata (`np.polyfit`) samo na njenim inlierima. Svih 250 parabola računa se odjednom pomoću numpy-ja, pa
    je ovo približno brzo kao jedan običan fit.
 4. **Da li je to uopšte linija?** Linija trake je tanka, pa skoro svi pikseli oko nje leže na njoj: na
-   `project_video03.mp4`, `challenge01.mp4` i `challenge02.mp4` inlieri čine najmanje 94 % piksela svake linije.
+   `project_video03.mp4`, `challenge01.mp4` i `challenge02.mp4` inlieri kod 99 % linija čine bar 94 % piksela, a
+   nikad manje od 89 %.
    Sunčeve mrlje i lišće, s druge strane, popune ceo prozor. Ako je inliera manje od 60 %, smatram da u tom kadru
    linije nema (kod tako odbačenih „linija“ na `challenge03.mp4` medijana udela inliera je 44 %). Liniji treba
    i najmanje 300 piksela.
@@ -205,7 +207,7 @@ Računanje je u funkcijama `curvature` ([src/pipeline.py:237-245](src/pipeline.p
 - Duž puta razmera sledi iz kalibracije (pinhole model, predavanje 09). Tačka na putu u redu slike y udaljena je
   `Z = h·fy / (y - y_vp)`, gde je h visina kamere, a `y_vp = 419` red nedogledne tačke. U donjem redu traka je široka
   900 px, pa iz `900 = 3,7·fx / Z` dobijam `Z = 4,75 m` i h = 1,24 m. Gornja ivica trapeza je na 13,5 % rastojanja od
-  nedogledne tačke do dna, dakle na `4,75 / 0,135 = 35,2 m`. Platno zato pokriva **30,5 m** puta, i 1 px = 4,2 cm.
+  nedogledne tačke do dna, dakle na `4,75 / 0,135 = 35,2 m`. Platno zato pokriva **30,4 m** puta, i 1 px = 4,2 cm.
   Pošto je trapez na putu zapravo pravougaonik, platno je umanjen pogled odozgo i ova razmera važi svuda na njemu.
   Kada se platno u oštroj krivini skrati, `ym_per_px` na isti način računa razmeru za novu gornju ivicu.
 - Nezavisna provera: isprekidana linija se na platnu ponavlja na svakih 338-365 px, odnosno 14,1-15,2 m. Na
@@ -235,7 +237,7 @@ Rezultati na test slikama (izlaz komande `python main.py sources/test_images/`):
 
 Kroz ceo `project_video03.mp4` poluprečnik u krivinama je uglavnom 740-1350 m. U prvoj krivini medijana je 1000 m, a
 Udacity materijal iz kog ovaj snimak potiče za nju navodi otprilike 1 km. Na pravom delu, otprilike od 12. do 25.
-sekunde, poluprečnik prelazi 5 km. Vozilo se sve vreme kreće 0-0,55 m levo od centra trake:
+sekunde, poluprečnik prelazi 5 km. Vozilo se kreće najviše 0,55 m levo od centra trake:
 
 ![Poluprečnik krivine i pomeraj vozila kroz project_video03.mp4](docs/measurements.png)
 
@@ -311,7 +313,7 @@ U odnosu na obradu pojedinačne slike, video koristi i informaciju iz prethodnih
    poluprečnike iznad 300 m, a sve manje kako se krivina oštri, do oko 11 m pri poluprečniku od 30 m. Domet se menja
    polako (najviše 0,005 po kadru), a prethodni polinomi se na novo platno prenose homografijom `M_novo · Minv_staro`
    (`remap`, [src/pipeline.py:209-214](src/pipeline.py#L209-L214)), pa se praćenje nastavlja bez skoka. Na prvih pet
-   snimaka platno sve vreme ostaje na 30,5 m, pa tamo ovo ništa ne menja. Na `challenge03.mp4` platno je kraće na 900
+   snimaka platno sve vreme ostaje na 30,4 m, pa tamo ovo ništa ne menja. Na `challenge03.mp4` platno je kraće na 900
    od 1199 kadrova, a najkraće je 11,1 m.
 
 Kadrovi iz ostalih snimaka. Poslednji kadar pokazuje grešku na `challenge03.mp4` u drugoj ukosnici:
@@ -351,7 +353,7 @@ Kadrovi iz ostalih snimaka. Poslednji kadar pokazuje grešku na `challenge03.mp4
 
    Sada se traka crta na 91 % kadrova. Kao meru pogrešnih traka brojao sam kadrove van druge ukosnice u kojima bi
    vozilo bilo više od 0,8 m od centra trake. Takvih je ranije bilo 11, a sada ih nema. Bez RANSAC-a (sa običnim
-   najmanjim kvadratima) bilo bi ih 16. Sa fiksnim platnom od 30 m ih takođe ne bi bilo, ali bi traka bila iscrtana na
+   najmanjim kvadratima) bilo bi ih 17. Sa fiksnim platnom od 30 m ih takođe ne bi bilo, ali bi traka bila iscrtana na
    manje kadrova (1058 umesto 1096). U samoj ukosnici ovakav pomeraj je stvaran, jer vozač seče krivinu uz središnju
    liniju.
 5. **Dve različite kamere.** Za snimke 960x540 nema slika šahovske table, pa se na njima ne radi korekcija distorzije,
